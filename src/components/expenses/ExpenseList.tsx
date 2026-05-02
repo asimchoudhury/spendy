@@ -1,25 +1,23 @@
 "use client";
 
-import { Expense } from "@/types/expense";
+import { Expense, CategoryData } from "@/types/expense";
 import { ExpenseItem } from "./ExpenseItem";
 import { Receipt } from "lucide-react";
 
 interface ExpenseListProps {
   expenses: Expense[];
+  categories?: CategoryData[];
   onEdit: (expense: Expense) => void;
   onDelete: (id: string) => void;
   isLoaded: boolean;
 }
 
-export function ExpenseList({ expenses, onEdit, onDelete, isLoaded }: ExpenseListProps) {
+export function ExpenseList({ expenses, categories, onEdit, onDelete, isLoaded }: ExpenseListProps) {
   if (!isLoaded) {
     return (
       <div className="flex flex-col gap-3">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-[72px] bg-gray-100 rounded-xl animate-pulse"
-          />
+          <div key={i} className="h-[72px] bg-gray-100 rounded-xl animate-pulse" />
         ))}
       </div>
     );
@@ -39,7 +37,6 @@ export function ExpenseList({ expenses, onEdit, onDelete, isLoaded }: ExpenseLis
     );
   }
 
-  // Group by date
   const grouped = expenses.reduce(
     (acc, e) => {
       if (!acc[e.date]) acc[e.date] = [];
@@ -81,6 +78,7 @@ export function ExpenseList({ expenses, onEdit, onDelete, isLoaded }: ExpenseLis
               <ExpenseItem
                 key={expense.id}
                 expense={expense}
+                categories={categories}
                 onEdit={onEdit}
                 onDelete={onDelete}
               />

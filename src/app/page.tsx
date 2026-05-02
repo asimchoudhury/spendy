@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useCategories } from "@/hooks/useCategories";
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { SpendingChart } from "@/components/dashboard/SpendingChart";
+import { MonthlySpendingChart } from "@/components/dashboard/MonthlySpendingChart";
+import { MonthlyDonutChart } from "@/components/dashboard/MonthlyDonutChart";
 import { CategoryBreakdown } from "@/components/dashboard/CategoryBreakdown";
 import { RecentExpenses } from "@/components/dashboard/RecentExpenses";
 import { Modal } from "@/components/ui/Modal";
@@ -13,6 +16,7 @@ import { Plus, Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
   const { expenses, addExpense, seedSampleData, isLoaded, stats } = useExpenses();
+  const { categories } = useCategories();
   const [showForm, setShowForm] = useState(false);
   const { toasts, addToast, dismiss } = useToast();
 
@@ -30,7 +34,6 @@ export default function DashboardPage() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -60,7 +63,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Skeleton or content */}
         {!isLoaded ? (
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -73,37 +75,33 @@ export default function DashboardPage() {
         ) : (
           <>
             <SummaryCards
-              total={stats.total}
-              monthly={stats.monthly}
-              lastMonthTotal={stats.lastMonthTotal}
-              topCategory={stats.topCategory}
-              topCategoryAmount={stats.topCategoryAmount}
-              count={stats.count}
-              monthlyCount={stats.monthlyCount}
+              expenses={expenses}
+              categories={categories}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2">
-                <SpendingChart data={stats.daily} />
+                <SpendingChart expenses={expenses} />
               </div>
               <CategoryBreakdown
-                data={stats.categoryData}
-                total={stats.total}
+                expenses={expenses}
+                categories={categories}
               />
             </div>
 
-            <RecentExpenses expenses={expenses} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <MonthlySpendingChart expenses={expenses} />
+              <MonthlyDonutChart expenses={expenses} categories={categories} />
+            </div>
+
+            <RecentExpenses expenses={expenses} categories={categories} />
           </>
         )}
       </div>
 
-      {/* Add Expense Modal */}
-      <Modal
-        isOpen={showForm}
-        onClose={() => setShowForm(false)}
-        title="Add Expense"
-      >
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="Add Expense">
         <ExpenseForm
+          categories={categories}
           onSubmit={handleAdd}
           onCancel={() => setShowForm(false)}
         />

@@ -2,11 +2,12 @@ import { Expense } from "@/types/expense";
 import { formatCurrency } from "./currency";
 
 export function exportToCSV(expenses: Expense[]): void {
-  const headers = ["Date", "Description", "Category", "Amount (₹)"];
+  const headers = ["Date", "Description", "Category", "Subcategory", "Amount (₹)"];
   const rows = expenses.map((e) => [
     e.date,
     `"${e.description.replace(/"/g, '""')}"`,
     e.category,
+    e.subcategory || "General",
     `"${formatCurrency(e.amount)}"`,
   ]);
 
@@ -36,20 +37,20 @@ export function generateSampleExpenses(): Omit<
   };
 
   return [
-    { date: daysAgo(0), amount: 12.5, category: "Food", description: "Lunch at cafe" },
-    { date: daysAgo(1), amount: 45.0, category: "Shopping", description: "Grocery shopping" },
-    { date: daysAgo(2), amount: 9.99, category: "Entertainment", description: "Netflix subscription" },
-    { date: daysAgo(3), amount: 35.0, category: "Transportation", description: "Uber to airport" },
-    { date: daysAgo(4), amount: 120.0, category: "Bills", description: "Electricity bill" },
-    { date: daysAgo(5), amount: 18.75, category: "Food", description: "Dinner takeout" },
-    { date: daysAgo(7), amount: 55.0, category: "Shopping", description: "New shirt" },
-    { date: daysAgo(8), amount: 6.5, category: "Food", description: "Morning coffee" },
-    { date: daysAgo(10), amount: 80.0, category: "Bills", description: "Internet bill" },
-    { date: daysAgo(12), amount: 25.0, category: "Entertainment", description: "Movie tickets" },
-    { date: daysAgo(14), amount: 15.0, category: "Transportation", description: "Bus pass top-up" },
-    { date: daysAgo(15), amount: 200.0, category: "Shopping", description: "Shoes" },
-    { date: daysAgo(18), amount: 22.0, category: "Food", description: "Brunch with friends" },
-    { date: daysAgo(20), amount: 40.0, category: "Other", description: "Haircut" },
-    { date: daysAgo(22), amount: 300.0, category: "Bills", description: "Rent portion" },
+    { date: daysAgo(0), amount: 12.5, category: "Food", subcategory: "General", description: "Lunch at cafe" },
+    { date: daysAgo(1), amount: 45.0, category: "Shopping", subcategory: "General", description: "Grocery shopping" },
+    { date: daysAgo(2), amount: 9.99, category: "Entertainment", subcategory: "General", description: "Netflix subscription" },
+    { date: daysAgo(3), amount: 35.0, category: "Transportation", subcategory: "General", description: "Uber to airport" },
+    { date: daysAgo(4), amount: 120.0, category: "Bills", subcategory: "General", description: "Electricity bill" },
+    { date: daysAgo(5), amount: 18.75, category: "Food", subcategory: "General", description: "Dinner takeout" },
+    { date: daysAgo(7), amount: 55.0, category: "Shopping", subcategory: "General", description: "New shirt" },
+    { date: daysAgo(8), amount: 6.5, category: "Food", subcategory: "General", description: "Morning coffee" },
+    { date: daysAgo(10), amount: 80.0, category: "Bills", subcategory: "General", description: "Internet bill" },
+    { date: daysAgo(12), amount: 25.0, category: "Entertainment", subcategory: "General", description: "Movie tickets" },
+    { date: daysAgo(14), amount: 15.0, category: "Transportation", subcategory: "General", description: "Bus pass top-up" },
+    { date: daysAgo(15), amount: 200.0, category: "Shopping", subcategory: "General", description: "Shoes" },
+    { date: daysAgo(18), amount: 22.0, category: "Food", subcategory: "General", description: "Brunch with friends" },
+    { date: daysAgo(20), amount: 40.0, category: "Other", subcategory: "General", description: "Haircut" },
+    { date: daysAgo(22), amount: 300.0, category: "Bills", subcategory: "General", description: "Rent portion" },
   ];
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useExpenses } from "@/hooks/useExpenses";
+import { useCategories } from "@/hooks/useCategories";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
 import { ExpenseFiltersBar } from "@/components/expenses/ExpenseFilters";
 import { Modal } from "@/components/ui/Modal";
@@ -23,6 +24,7 @@ export default function ExpensesPage() {
     deleteExpense,
     isLoaded,
   } = useExpenses();
+  const { categories } = useCategories();
 
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -42,9 +44,7 @@ export default function ExpensesPage() {
     addToast("success", "Expense updated!");
   };
 
-  const handleDelete = (id: string) => {
-    setDeleteConfirm(id);
-  };
+  const handleDelete = (id: string) => setDeleteConfirm(id);
 
   const confirmDelete = () => {
     if (!deleteConfirm) return;
@@ -67,7 +67,6 @@ export default function ExpensesPage() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Expenses</h1>
@@ -95,17 +94,16 @@ export default function ExpensesPage() {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <ExpenseFiltersBar
             filters={filters}
             onChange={setFilters}
+            categories={categories}
             count={filteredExpenses.length}
             total={filteredTotal}
           />
         </div>
 
-        {/* Total for filtered results */}
         {isLoaded && filteredExpenses.length > 0 && (
           <div className="flex items-center justify-between px-1">
             <span className="text-sm text-gray-500">
@@ -117,28 +115,23 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        {/* List */}
         <ExpenseList
           expenses={filteredExpenses}
+          categories={categories}
           onEdit={setEditingExpense}
           onDelete={handleDelete}
           isLoaded={isLoaded}
         />
       </div>
 
-      {/* Add modal */}
-      <Modal
-        isOpen={showAddForm}
-        onClose={() => setShowAddForm(false)}
-        title="Add Expense"
-      >
+      <Modal isOpen={showAddForm} onClose={() => setShowAddForm(false)} title="Add Expense">
         <ExpenseForm
+          categories={categories}
           onSubmit={handleAdd}
           onCancel={() => setShowAddForm(false)}
         />
       </Modal>
 
-      {/* Edit modal */}
       <Modal
         isOpen={!!editingExpense}
         onClose={() => setEditingExpense(null)}
@@ -147,13 +140,13 @@ export default function ExpensesPage() {
         {editingExpense && (
           <ExpenseForm
             initialData={editingExpense}
+            categories={categories}
             onSubmit={handleUpdate}
             onCancel={() => setEditingExpense(null)}
           />
         )}
       </Modal>
 
-      {/* Delete confirm modal */}
       <Modal
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
@@ -165,12 +158,8 @@ export default function ExpensesPage() {
               <Trash2 size={18} className="text-red-500" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900">
-                Delete this expense?
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                This action cannot be undone.
-              </p>
+              <p className="text-sm font-medium text-gray-900">Delete this expense?</p>
+              <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone.</p>
             </div>
           </div>
           <div className="flex gap-3">

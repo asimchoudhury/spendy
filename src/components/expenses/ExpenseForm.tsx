@@ -1,28 +1,45 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Expense, ExpenseFormData, Category } from "@/types/expense";
-import { CATEGORIES } from "@/utils/categories";
-import { CATEGORY_CONFIG } from "@/utils/categories";
+import { useState, useEffect, useRef } from "react";
+import { Expense, ExpenseFormData, CategoryData } from "@/types/expense";
+import { DEFAULT_CATEGORIES } from "@/utils/categories";
 
 interface ExpenseFormProps {
   onSubmit: (data: ExpenseFormData) => void;
   onCancel: () => void;
   initialData?: Expense;
+  categories?: CategoryData[];
   isSubmitting?: boolean;
 }
 
 const today = () => new Date().toISOString().split("T")[0];
 
-function validate(data: ExpenseFormData): Partial<Record<keyof ExpenseFormData, string>> {
-  const errors: Partial<Record<keyof ExpenseFormData, string>> = {};
+interface FormErrors {
+  date?: string;
+  amount?: string;
+  category?: string;
+  subcategory?: string;
+  description?: string;
+}
+
+function validate(data: ExpenseFormData): FormErrors {
+  const errors: FormErrors = {};
   if (!data.date) errors.date = "Date is required";
   else if (data.date > today()) errors.date = "Date cannot be in the future";
 
-  const amount = parseFloat(data.amount);
-  if (!data.amount) errors.amount = "Amount is required";
-  else if (isNaN(amount) || amount <= 0) errors.amount = "Enter a valid positive amount";
-  else if (amount > 1_000_000) errors.amount = "Amount seems too large";
+  const raw = data.amount;
+  if (!raw) {
+    errors.amount = "Amount is required";
+  } else if (!/^\d*\.?\d+$/.test(raw)) {
+    errors.amount = "Enter a valid positive number (no letters)";
+  } else {
+    const amount = parseFloat(raw);
+    if (isNaN(amount) || amount <= 0) errors.amount = "Amount must be greater than zero";
+    else if (amount > 1_000_000) errors.amount = "Amount seems too large";
+  }
+
+  if (!data.category) errors.category = "Category is required";
+  if (!data.subcategory) errors.subcategory = "Subcategory is required";
 
   if (!data.description.trim()) errors.description = "Description is required";
   else if (data.description.trim().length < 2) errors.description = "Description is too short";
@@ -31,25 +48,53 @@ function validate(data: ExpenseFormData): Partial<Record<keyof ExpenseFormData, 
   return errors;
 }
 
-export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: ExpenseFormProps) {
+export function ExpenseForm({
+  onSubmit,
+  onCancel,
+  initialData,
+  categories: categoriesProp,
+  isSubmitting,
+}: ExpenseFormProps) {
+  const categories = categoriesProp && categoriesProp.length > 0 ? categoriesProp : DEFAULT_CATEGORIES;
+
+  const defaultCategory = categories[0]?.name ?? "Food";
+  const defaultSubcategory = categories[0]?.subcategories[0]?.name ?? "General";
+
   const [form, setForm] = useState<ExpenseFormData>({
     date: initialData?.date ?? today(),
     amount: initialData ? String(initialData.amount) : "",
-    category: initialData?.category ?? "Food",
+    category: initialData?.category ?? defaultCategory,
+    subcategory: initialData?.subcategory ?? defaultSubcategory,
     description: initialData?.description ?? "",
   });
-  const [errors, setErrors] = useState<Partial<Record<keyof ExpenseFormData, string>>>({});
-  const [touched, setTouched] = useState<Partial<Record<keyof ExpenseFormData, boolean>>>({});
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [touched, setTouched] = useState<Partial<Record<keyof FormErrors, boolean>>>({});
+  const categoryChangeMounted = useRef(false);
+
+  // Reset subcategory when category changes, but skip the initial mount (to preserve initialData.subcategory)
+  useEffect(() => {
+    if (!categoryChangeMounted.current) {
+      categoryChangeMounted.current = true;
+      return;
+    }
+    const cat = categories.find((c) => c.name === form.category);
+    const firstSub = cat?.subcategories[0]?.name ?? "General";
+    setForm((f) => ({ ...f, subcategory: firstSub }));
+  }, [form.category]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const subcategories =
+    categories.find((c) => c.name === form.category)?.subcategories ?? [];
 
   const set = (field: keyof ExpenseFormData, value: string) => {
-    setForm((f) => ({ ...f, [field]: value }));
-    if (touched[field]) {
-      const errs = validate({ ...form, [field]: value });
-      setErrors((e) => ({ ...e, [field]: errs[field] }));
+    const updated = { ...form, [field]: value };
+    setForm(updated);
+    if (touched[field as keyof FormErrors]) {
+      const errs = validate(updated);
+      setErrors((e) => ({ ...e, [field]: errs[field as keyof FormErrors] }));
     }
   };
 
-  const blur = (field: keyof ExpenseFormData) => {
+  const blur = (field: keyof FormErrors) => {
     setTouched((t) => ({ ...t, [field]: true }));
     const errs = validate(form);
     setErrors((e) => ({ ...e, [field]: errs[field] }));
@@ -57,9 +102,13 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const allTouched = Object.fromEntries(
-      (Object.keys(form) as (keyof ExpenseFormData)[]).map((k) => [k, true])
-    );
+    const allTouched: Partial<Record<keyof FormErrors, boolean>> = {
+      date: true,
+      amount: true,
+      category: true,
+      subcategory: true,
+      description: true,
+    };
     setTouched(allTouched);
     const errs = validate(form);
     setErrors(errs);
@@ -68,9 +117,9 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
     }
   };
 
-  const field = (
+  const fieldWrapper = (
     label: string,
-    key: keyof ExpenseFormData,
+    key: keyof FormErrors,
     children: React.ReactNode
   ) => (
     <div className="flex flex-col gap-1.5">
@@ -82,7 +131,7 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
     </div>
   );
 
-  const inputClass = (key: keyof ExpenseFormData) =>
+  const inputClass = (key: keyof FormErrors) =>
     `w-full px-3 py-2.5 rounded-lg border text-sm transition-colors outline-none focus:ring-2 focus:ring-violet-500/30 ${
       errors[key] && touched[key]
         ? "border-red-300 bg-red-50 focus:border-red-400"
@@ -91,7 +140,7 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      {field(
+      {fieldWrapper(
         "Date",
         "date",
         <input
@@ -104,7 +153,7 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
         />
       )}
 
-      {field(
+      {fieldWrapper(
         "Amount (₹)",
         "amount",
         <div className="relative">
@@ -112,9 +161,8 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
             ₹
           </span>
           <input
-            type="number"
-            min="0.01"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             placeholder="0.00"
             value={form.amount}
             onChange={(e) => set("amount", e.target.value)}
@@ -124,33 +172,52 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
         </div>
       )}
 
-      {field(
+      {fieldWrapper(
         "Category",
         "category",
-        <div className="grid grid-cols-3 gap-2">
-          {CATEGORIES.map((cat) => {
-            const config = CATEGORY_CONFIG[cat];
-            const selected = form.category === cat;
+        <div className="grid grid-cols-3 gap-2 max-h-52 overflow-y-auto pr-1">
+          {categories.map((cat) => {
+            const selected = form.category === cat.name;
             return (
               <button
-                key={cat}
+                key={cat.id}
                 type="button"
-                onClick={() => set("category", cat)}
+                onClick={() => set("category", cat.name)}
                 className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs font-medium transition-all ${
                   selected
-                    ? `${config.bgColor} ${config.textColor} border-current ring-2 ring-current/30`
+                    ? `${cat.bgColor} ${cat.textColor} border-current ring-2 ring-current/30`
                     : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
                 }`}
               >
-                <span className="text-lg">{config.icon}</span>
-                {cat}
+                <span className="text-lg">{cat.icon}</span>
+                <span className="truncate w-full text-center">{cat.name}</span>
               </button>
             );
           })}
         </div>
       )}
 
-      {field(
+      {fieldWrapper(
+        "Subcategory",
+        "subcategory",
+        <select
+          value={form.subcategory}
+          onChange={(e) => set("subcategory", e.target.value)}
+          onBlur={() => blur("subcategory")}
+          className={inputClass("subcategory")}
+        >
+          {subcategories.map((sub) => (
+            <option key={sub.id} value={sub.name}>
+              {sub.name}
+            </option>
+          ))}
+          {subcategories.length === 0 && (
+            <option value="General">General</option>
+          )}
+        </select>
+      )}
+
+      {fieldWrapper(
         "Description",
         "description",
         <textarea
@@ -176,11 +243,7 @@ export function ExpenseForm({ onSubmit, onCancel, initialData, isSubmitting }: E
           disabled={isSubmitting}
           className="flex-1 px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
         >
-          {isSubmitting
-            ? "Saving..."
-            : initialData
-            ? "Update Expense"
-            : "Add Expense"}
+          {isSubmitting ? "Saving..." : initialData ? "Update Expense" : "Add Expense"}
         </button>
       </div>
     </form>

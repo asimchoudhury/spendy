@@ -1,16 +1,24 @@
-export type Category =
-  | "Food"
-  | "Transportation"
-  | "Entertainment"
-  | "Shopping"
-  | "Bills"
-  | "Other";
+export interface Subcategory {
+  id: string;
+  name: string;
+}
+
+export interface CategoryData {
+  id: string;
+  name: string;
+  color: string;
+  bgColor: string;
+  textColor: string;
+  icon: string;
+  subcategories: Subcategory[];
+}
 
 export interface Expense {
   id: string;
   date: string; // ISO date string YYYY-MM-DD
   amount: number;
-  category: Category;
+  category: string;
+  subcategory: string;
   description: string;
   createdAt: string;
   updatedAt: string;
@@ -18,7 +26,7 @@ export interface Expense {
 
 export interface ExpenseFilters {
   search: string;
-  category: Category | "All";
+  category: string; // "All" or a category name
   dateFrom: string;
   dateTo: string;
 }
@@ -26,6 +34,7 @@ export interface ExpenseFilters {
 export interface ExpenseFormData {
   date: string;
   amount: string;
-  category: Category;
+  category: string;
+  subcategory: string;
   description: string;
 }

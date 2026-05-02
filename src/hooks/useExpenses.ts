@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
-import { Expense, ExpenseFilters, ExpenseFormData, Category } from "@/types/expense";
+import { useMemo, useCallback, useEffect, useRef } from "react";
+import { Expense, ExpenseFilters, ExpenseFormData } from "@/types/expense";
 import { useLocalStorage } from "./useLocalStorage";
 import { generateSampleExpenses } from "@/utils/csv";
 
@@ -26,6 +26,22 @@ export function useExpenses() {
     DEFAULT_FILTERS
   );
 
+  // Migrate old expenses that lack a subcategory field
+  const migrated = useRef(false);
+  useEffect(() => {
+    if (!isLoaded || migrated.current) return;
+    migrated.current = true;
+    const needsMigration = expenses.some((e) => !("subcategory" in e) || !e.subcategory);
+    if (needsMigration) {
+      setExpenses((prev) =>
+        prev.map((e) => ({
+          ...e,
+          subcategory: e.subcategory || "General",
+        }))
+      );
+    }
+  }, [isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const seedSampleData = useCallback(() => {
     const samples = generateSampleExpenses();
     const now = new Date().toISOString();
@@ -45,7 +61,8 @@ export function useExpenses() {
         id: generateId(),
         date: data.date,
         amount: parseFloat(data.amount),
-        category: data.category as Category,
+        category: data.category,
+        subcategory: data.subcategory || "General",
         description: data.description.trim(),
         createdAt: now,
         updatedAt: now,
@@ -65,7 +82,8 @@ export function useExpenses() {
                 ...e,
                 date: data.date,
                 amount: parseFloat(data.amount),
-                category: data.category as Category,
+                category: data.category,
+                subcategory: data.subcategory || "General",
                 description: data.description.trim(),
                 updatedAt: new Date().toISOString(),
               }
@@ -83,6 +101,71 @@ export function useExpenses() {
     [setExpenses]
   );
 
+  // Move all expenses of a deleted category to another category
+  const bulkMigrateCategory = useCallback(
+    (fromCategory: string, toCategory: string, toSubcategory: string) => {
+      setExpenses((prev) =>
+        prev.map((e) =>
+          e.category === fromCategory
+            ? {
+                ...e,
+                category: toCategory,
+                subcategory: toSubcategory,
+                updatedAt: new Date().toISOString(),
+              }
+            : e
+        )
+      );
+    },
+    [setExpenses]
+  );
+
+  // Move all expenses of a deleted subcategory to another subcategory within the same category
+  const bulkMigrateSubcategory = useCallback(
+    (category: string, fromSubcategory: string, toSubcategory: string) => {
+      setExpenses((prev) =>
+        prev.map((e) =>
+          e.category === category && e.subcategory === fromSubcategory
+            ? {
+                ...e,
+                subcategory: toSubcategory,
+                updatedAt: new Date().toISOString(),
+              }
+            : e
+        )
+      );
+    },
+    [setExpenses]
+  );
+
+  // Rename category across all expenses when a category name changes
+  const bulkRenameCategory = useCallback(
+    (oldName: string, newName: string) => {
+      setExpenses((prev) =>
+        prev.map((e) =>
+          e.category === oldName
+            ? { ...e, category: newName, updatedAt: new Date().toISOString() }
+            : e
+        )
+      );
+    },
+    [setExpenses]
+  );
+
+  // Rename subcategory across all expenses when a subcategory name changes
+  const bulkRenameSubcategory = useCallback(
+    (category: string, oldName: string, newName: string) => {
+      setExpenses((prev) =>
+        prev.map((e) =>
+          e.category === category && e.subcategory === oldName
+            ? { ...e, subcategory: newName, updatedAt: new Date().toISOString() }
+            : e
+        )
+      );
+    },
+    [setExpenses]
+  );
+
   const filteredExpenses = useMemo(() => {
     return expenses
       .filter((e) => {
@@ -90,7 +173,8 @@ export function useExpenses() {
           const q = filters.search.toLowerCase();
           if (
             !e.description.toLowerCase().includes(q) &&
-            !e.category.toLowerCase().includes(q)
+            !e.category.toLowerCase().includes(q) &&
+            !e.subcategory.toLowerCase().includes(q)
           )
             return false;
         }
@@ -100,7 +184,10 @@ export function useExpenses() {
         if (filters.dateTo && e.date > filters.dateTo) return false;
         return true;
       })
-      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+      .sort(
+        (a, b) =>
+          b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)
+      );
   }, [expenses, filters]);
 
   const stats = useMemo(() => {
@@ -131,24 +218,6 @@ export function useExpenses() {
       ([, a], [, b]) => b - a
     )[0];
 
-    // Daily spending for the last 30 days
-    const dailyMap: Record<string, number> = {};
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().split("T")[0];
-      dailyMap[key] = 0;
-    }
-    expenses.forEach((e) => {
-      if (dailyMap[e.date] !== undefined) {
-        dailyMap[e.date] += e.amount;
-      }
-    });
-    const daily = Object.entries(dailyMap).map(([date, amount]) => ({
-      date,
-      amount,
-    }));
-
     const categoryData = Object.entries(byCategory)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
@@ -161,9 +230,7 @@ export function useExpenses() {
       topCategory: topCategory ? topCategory[0] : null,
       topCategoryAmount: topCategory ? topCategory[1] : 0,
       count: expenses.length,
-      monthlyCount: expenses.filter((e) => e.date.startsWith(currentMonth))
-        .length,
-      daily,
+      monthlyCount: expenses.filter((e) => e.date.startsWith(currentMonth)).length,
       categoryData,
     };
   }, [expenses]);
@@ -176,6 +243,10 @@ export function useExpenses() {
     addExpense,
     updateExpense,
     deleteExpense,
+    bulkMigrateCategory,
+    bulkMigrateSubcategory,
+    bulkRenameCategory,
+    bulkRenameSubcategory,
     seedSampleData,
     isLoaded,
     stats,

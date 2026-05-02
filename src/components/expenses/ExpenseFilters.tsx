@@ -1,18 +1,26 @@
 "use client";
 
 import { Search, X, SlidersHorizontal } from "lucide-react";
-import { ExpenseFilters } from "@/types/expense";
-import { CATEGORIES } from "@/utils/categories";
+import { ExpenseFilters, CategoryData } from "@/types/expense";
+import { DEFAULT_CATEGORIES } from "@/utils/categories";
 import { useState } from "react";
 
 interface ExpenseFiltersProps {
   filters: ExpenseFilters;
   onChange: (filters: ExpenseFilters) => void;
+  categories?: CategoryData[];
   count: number;
   total: number;
 }
 
-export function ExpenseFiltersBar({ filters, onChange, count, total }: ExpenseFiltersProps) {
+export function ExpenseFiltersBar({
+  filters,
+  onChange,
+  categories: categoriesProp,
+  count,
+}: ExpenseFiltersProps) {
+  const categories =
+    categoriesProp && categoriesProp.length > 0 ? categoriesProp : DEFAULT_CATEGORIES;
   const [showDateFilters, setShowDateFilters] = useState(false);
 
   const set = (partial: Partial<ExpenseFilters>) =>
@@ -30,7 +38,6 @@ export function ExpenseFiltersBar({ filters, onChange, count, total }: ExpenseFi
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-2">
-        {/* Search */}
         <div className="relative flex-1">
           <Search
             size={15}
@@ -53,7 +60,6 @@ export function ExpenseFiltersBar({ filters, onChange, count, total }: ExpenseFi
           )}
         </div>
 
-        {/* Date filter toggle */}
         <button
           onClick={() => setShowDateFilters((s) => !s)}
           className={`flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors ${
@@ -66,7 +72,6 @@ export function ExpenseFiltersBar({ filters, onChange, count, total }: ExpenseFi
           <span className="hidden sm:inline">Date</span>
         </button>
 
-        {/* Clear */}
         {hasActiveFilters && (
           <button
             onClick={clear}
@@ -78,9 +83,8 @@ export function ExpenseFiltersBar({ filters, onChange, count, total }: ExpenseFi
         )}
       </div>
 
-      {/* Category filter */}
       <div className="flex gap-2 flex-wrap">
-        {(["All", ...CATEGORIES] as const).map((cat) => (
+        {(["All", ...categories.map((c) => c.name)] as string[]).map((cat) => (
           <button
             key={cat}
             onClick={() => set({ category: cat })}
@@ -95,7 +99,6 @@ export function ExpenseFiltersBar({ filters, onChange, count, total }: ExpenseFi
         ))}
       </div>
 
-      {/* Date range */}
       {showDateFilters && (
         <div className="flex gap-3 flex-wrap">
           <div className="flex items-center gap-2">
@@ -123,7 +126,6 @@ export function ExpenseFiltersBar({ filters, onChange, count, total }: ExpenseFi
         </div>
       )}
 
-      {/* Result count */}
       <div className="text-xs text-gray-500">
         {count} expense{count !== 1 ? "s" : ""} found
         {hasActiveFilters && (
