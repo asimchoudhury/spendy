@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Receipt, Menu, X, Wallet, Tags } from "lucide-react";
+import { LayoutDashboard, Receipt, Menu, X, Wallet, Tags, Cloud } from "lucide-react";
 import { useState, type ComponentType } from "react";
 
 type NavItem = {
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { href: "/expenses", label: "Expenses", lucideIcon: Receipt },
   { href: "/breakdown", label: "Breakdown", emoji: "📊" },
   { href: "/categories", label: "Categories", lucideIcon: Tags },
+  { href: "/export", label: "Export", lucideIcon: Cloud },
 ];
 
 export function Navigation() {
