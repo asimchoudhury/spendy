@@ -9,9 +9,9 @@ import { Modal } from "@/components/ui/Modal";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { Expense, ExpenseFormData } from "@/types/expense";
-import { exportToCSV } from "@/utils/csv";
 import { formatCurrency } from "@/utils/currency";
-import { Plus, Download, Trash2 } from "lucide-react";
+import { ExportModal } from "@/components/export/ExportModal";
+import { Plus, Upload, Trash2 } from "lucide-react";
 
 export default function ExpensesPage() {
   const {
@@ -28,6 +28,7 @@ export default function ExpensesPage() {
 
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const { toasts, addToast, dismiss } = useToast();
 
@@ -53,15 +54,6 @@ export default function ExpensesPage() {
     addToast("success", "Expense deleted.");
   };
 
-  const handleExport = () => {
-    if (filteredExpenses.length === 0) {
-      addToast("error", "No expenses to export.");
-      return;
-    }
-    exportToCSV(filteredExpenses);
-    addToast("success", `Exported ${filteredExpenses.length} expenses to CSV.`);
-  };
-
   const filteredTotal = filteredExpenses.reduce((s, e) => s + e.amount, 0);
 
   return (
@@ -78,11 +70,11 @@ export default function ExpensesPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleExport}
+              onClick={() => setShowExport(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
             >
-              <Download size={15} />
-              <span className="hidden sm:inline">Export CSV</span>
+              <Upload size={15} />
+              <span className="hidden sm:inline">Export</span>
             </button>
             <button
               onClick={() => setShowAddForm(true)}
@@ -178,6 +170,13 @@ export default function ExpensesPage() {
           </div>
         </div>
       </Modal>
+
+      <ExportModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        expenses={expenses}
+        categories={categories}
+      />
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </>
