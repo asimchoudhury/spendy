@@ -12,7 +12,8 @@ import { RecentExpenses } from "@/components/dashboard/RecentExpenses";
 import { Modal } from "@/components/ui/Modal";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
-import { Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles, Download } from "lucide-react";
+import { exportToCSV } from "@/utils/csv";
 
 export default function DashboardPage() {
   const { expenses, addExpense, seedSampleData, isLoaded, stats } = useExpenses();
@@ -51,6 +52,15 @@ export default function DashboardPage() {
               >
                 <Sparkles size={15} />
                 <span className="hidden sm:inline">Load Sample Data</span>
+              </button>
+            )}
+            {isLoaded && expenses.length > 0 && (
+              <button
+                onClick={() => exportToCSV(expenses)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 text-sm font-medium transition-colors"
+              >
+                <Download size={15} />
+                <span className="hidden sm:inline">Export CSV</span>
               </button>
             )}
             <button
