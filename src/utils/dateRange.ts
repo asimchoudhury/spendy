@@ -3,10 +3,10 @@ import { format, subMonths, subYears } from "date-fns";
 export type TimeRange = "all" | "1y" | "6m" | "3m";
 
 export const TIME_RANGE_OPTIONS: { label: string; value: TimeRange }[] = [
-  { label: "All Time", value: "all" },
-  { label: "1 Year", value: "1y" },
-  { label: "6 Months", value: "6m" },
-  { label: "3 Months", value: "3m" },
+  { label: "All", value: "all" },
+  { label: "1 Yr", value: "1y" },
+  { label: "6 Mo", value: "6m" },
+  { label: "3 Mo", value: "3m" },
 ];
 
 export function getStartDateStr(range: TimeRange): string | null {

@@ -317,7 +317,7 @@ export default function CategoriesPage() {
                             style={{ backgroundColor: cat.color }}
                           />
                           <span className="text-sm text-gray-700 flex-1">{sub.name}</span>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() =>
                                 openModal({

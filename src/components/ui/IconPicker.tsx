@@ -11,7 +11,7 @@ interface IconPickerProps {
 
 export function IconPicker({ selected, onSelect }: IconPickerProps) {
   return (
-    <div className="grid grid-cols-7 gap-1.5">
+    <div className="grid grid-cols-6 gap-1.5">
       {PICKER_ICONS.map((icon) => (
         <button
           key={icon}

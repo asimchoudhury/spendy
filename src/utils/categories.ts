@@ -21,6 +21,15 @@ export const ICON_KEYWORDS: Array<{ icon: string; keywords: string[] }> = [
   { icon: "🎁", keywords: ["gifts", "shopping", "presents"] },
   { icon: "🏋️", keywords: ["gym", "workout"] },
   { icon: "🌿", keywords: ["nature", "garden", "outdoor"] },
+  { icon: "🏔️", keywords: ["mountains", "trekking", "hiking", "adventure", "altitude", "peaks", "snow"] },
+  { icon: "🌲", keywords: ["forest", "trees", "pine", "woods", "camping"] },
+  { icon: "🏪", keywords: ["shop", "local", "kirana", "convenience", "neighbourhood"] },
+  { icon: "🌱", keywords: ["organic", "eco", "sustainable", "vegan"] },
+  { icon: "🧘‍♂️", keywords: ["meditation", "yoga", "mindfulness", "wellness", "spiritual", "calm"] },
+  { icon: "🧘‍♀️", keywords: ["meditation", "yoga", "mindfulness", "wellness", "spiritual", "peace", "women"] },
+  { icon: "🌊", keywords: ["ocean", "sea", "beach", "waves", "swimming", "surf", "coastal"] },
+  { icon: "☀️", keywords: ["sun", "solar", "summer", "energy", "morning", "daylight", "sunshine"] },
+  { icon: "🌙", keywords: ["moon", "night", "evening", "lunar", "sleep", "nighttime", "stars"] },
 ];
 
 export function suggestIconForCategory(name: string): string {
