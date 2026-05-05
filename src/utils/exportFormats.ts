@@ -49,11 +49,14 @@ export function exportJSON(expenses: Expense[], filename: string): void {
       ),
     },
     expenses: expenses.map((e) => ({
+      id: e.id,
       date: e.date,
       description: e.description,
       category: e.category,
       subcategory: e.subcategory || "General",
       amount: e.amount,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
     })),
   };
 

@@ -118,6 +118,27 @@ export function useCategories() {
     [categories]
   );
 
+  // Bulk-add categories that don't already exist (used during import)
+  const importCategories = useCallback(
+    (categoryNames: string[]): void => {
+      setCategories((prev) => {
+        const existingNames = new Set(prev.map((c) => c.name));
+        const newCats: CategoryData[] = categoryNames
+          .filter((name) => !existingNames.has(name))
+          .map((name, i) => ({
+            id: generateId(),
+            name,
+            ...getNextColor(prev.length + i),
+            icon: suggestIconForCategory(name),
+            subcategories: [{ id: generateId(), name: "General" }],
+          }));
+        if (newCats.length === 0) return prev;
+        return [...prev, ...newCats];
+      });
+    },
+    [setCategories]
+  );
+
   return {
     categories,
     isLoaded,
@@ -128,5 +149,6 @@ export function useCategories() {
     updateSubcategory,
     deleteSubcategory,
     getSubcategories,
+    importCategories,
   };
 }

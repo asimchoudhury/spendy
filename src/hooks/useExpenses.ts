@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useCallback, useEffect, useRef } from "react";
-import { Expense, ExpenseFilters, ExpenseFormData } from "@/types/expense";
+import { Expense, BackupExpense, ExpenseFilters, ExpenseFormData } from "@/types/expense";
 import { useLocalStorage } from "./useLocalStorage";
 import { generateSampleExpenses } from "@/utils/csv";
 
@@ -55,7 +55,7 @@ export function useExpenses() {
   }, [setExpenses]);
 
   const addExpense = useCallback(
-    (data: ExpenseFormData) => {
+    (data: ExpenseFormData): { expense?: Expense; quotaExceeded?: boolean } => {
       const now = new Date().toISOString();
       const expense: Expense = {
         id: generateId(),
@@ -67,15 +67,16 @@ export function useExpenses() {
         createdAt: now,
         updatedAt: now,
       };
-      setExpenses((prev) => [expense, ...prev]);
-      return expense;
+      const result = setExpenses((prev) => [expense, ...prev]);
+      if (result.quotaExceeded) return { quotaExceeded: true };
+      return { expense };
     },
     [setExpenses]
   );
 
   const updateExpense = useCallback(
-    (id: string, data: ExpenseFormData) => {
-      setExpenses((prev) =>
+    (id: string, data: ExpenseFormData): { quotaExceeded?: boolean } => {
+      return setExpenses((prev) =>
         prev.map((e) =>
           e.id === id
             ? {
@@ -97,6 +98,49 @@ export function useExpenses() {
   const deleteExpense = useCallback(
     (id: string) => {
       setExpenses((prev) => prev.filter((e) => e.id !== id));
+    },
+    [setExpenses]
+  );
+
+  // Smart import: merge by ID — skip duplicates, add new
+  const smartImportExpenses = useCallback(
+    (backupExpenses: BackupExpense[]): { added: number; skipped: number; quotaExceeded?: boolean } => {
+      const existingIds = new Set(expenses.map((e) => e.id));
+      const now = new Date().toISOString();
+      const toAdd: Expense[] = backupExpenses
+        .filter((e) => !e.id || !existingIds.has(e.id))
+        .map((e) => ({
+          id: e.id || generateId(),
+          date: e.date,
+          amount: e.amount,
+          category: e.category,
+          subcategory: e.subcategory || "General",
+          description: e.description,
+          createdAt: e.createdAt || now,
+          updatedAt: e.updatedAt || now,
+        }));
+      const result = setExpenses((prev) => [...prev, ...toAdd]);
+      if (result.quotaExceeded) return { added: 0, skipped: backupExpenses.length, quotaExceeded: true };
+      return { added: toAdd.length, skipped: backupExpenses.length - toAdd.length };
+    },
+    [expenses, setExpenses]
+  );
+
+  // Replace all: overwrite all expenses with backup data
+  const replaceAllExpenses = useCallback(
+    (backupExpenses: BackupExpense[]): { quotaExceeded?: boolean } => {
+      const now = new Date().toISOString();
+      const normalized: Expense[] = backupExpenses.map((e) => ({
+        id: e.id || generateId(),
+        date: e.date,
+        amount: e.amount,
+        category: e.category,
+        subcategory: e.subcategory || "General",
+        description: e.description,
+        createdAt: e.createdAt || now,
+        updatedAt: e.updatedAt || now,
+      }));
+      return setExpenses(normalized);
     },
     [setExpenses]
   );
@@ -243,6 +287,8 @@ export function useExpenses() {
     addExpense,
     updateExpense,
     deleteExpense,
+    smartImportExpenses,
+    replaceAllExpenses,
     bulkMigrateCategory,
     bulkMigrateSubcategory,
     bulkRenameCategory,

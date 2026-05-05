@@ -38,3 +38,15 @@ export interface ExpenseFormData {
   subcategory: string;
   description: string;
 }
+
+// Represents an expense from a JSON backup file — id and timestamps may be absent in old exports
+export interface BackupExpense {
+  id?: string;
+  date: string;
+  amount: number;
+  category: string;
+  subcategory?: string;
+  description: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
