@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+#user how-to guide with color screen-shots
+docs/user/how-to-add-expense.docx
+
