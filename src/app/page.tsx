@@ -20,7 +20,7 @@ import { exportJSON } from "@/utils/exportFormats";
 import { Plus, Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
-  const { expenses, addExpense, seedSampleData, isLoaded, stats } = useExpenses();
+  const { expenses, addExpense, seedSampleData, isLoaded } = useExpenses();
   const { categories } = useCategories();
   const [showForm, setShowForm] = useState(false);
   const [showStorageFull, setShowStorageFull] = useState(false);
@@ -34,6 +34,7 @@ export default function DashboardPage() {
 
   // Check storage on load and whenever expenses change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isLoaded) refreshStorage();
   }, [isLoaded, expenses, refreshStorage]);
 

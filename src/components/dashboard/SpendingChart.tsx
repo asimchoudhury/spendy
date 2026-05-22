@@ -25,8 +25,9 @@ const DAY_OPTIONS = [
   { label: "90d", value: 90 },
 ];
 
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
+interface TooltipEntry { value: number }
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipEntry[]; label?: string }) {
+  if (!active || !payload?.length || !label) return null;
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3">
       <p className="text-xs text-gray-500 mb-1">

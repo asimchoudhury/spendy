@@ -220,9 +220,6 @@ export default function CategoriesPage() {
     modal?.type === "add-subcategory" ||
     modal?.type === "edit-subcategory";
 
-  const isDeleteModal =
-    modal?.type === "delete-category" || modal?.type === "delete-subcategory";
-
   return (
     <>
       <div className="flex flex-col gap-6">

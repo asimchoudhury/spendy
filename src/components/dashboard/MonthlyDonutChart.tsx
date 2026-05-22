@@ -13,7 +13,8 @@ interface MonthlyDonutChartProps {
   categories?: CategoryData[];
 }
 
-function CustomTooltip({ active, payload }: any) {
+interface TooltipEntry { payload: { name: string; value: number } }
+function CustomTooltip({ active, payload }: { active?: boolean; payload?: TooltipEntry[] }) {
   if (!active || !payload?.length) return null;
   const { name, value } = payload[0].payload;
   return (

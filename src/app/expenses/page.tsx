@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useCategories } from "@/hooks/useCategories";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
@@ -32,7 +31,6 @@ export default function ExpensesPage() {
     isLoaded,
   } = useExpenses();
   const { categories, importCategories } = useCategories();
-  const router = useRouter();
 
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -51,6 +49,7 @@ export default function ExpensesPage() {
     const flag = sessionStorage.getItem("spendy-highlight-actions");
     if (flag) {
       sessionStorage.removeItem("spendy-highlight-actions");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHighlighted(true);
       setTimeout(() => {
         importBtnRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });

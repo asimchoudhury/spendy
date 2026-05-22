@@ -5,7 +5,7 @@ import { format, subMonths, addMonths } from "date-fns";
 import { formatCurrency } from "@/utils/currency";
 import { getCategoryConfig } from "@/utils/categories";
 import { CategoryData, Expense } from "@/types/expense";
-import { TIME_RANGE_OPTIONS, TimeRange, filterByRange, getStartDateStr } from "@/utils/dateRange";
+import { TIME_RANGE_OPTIONS, TimeRange, filterByRange } from "@/utils/dateRange";
 import {
   TrendingUp,
   TrendingDown,

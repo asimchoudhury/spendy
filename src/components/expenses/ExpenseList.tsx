@@ -50,7 +50,7 @@ export function ExpenseList({ expenses, categories, onEdit, onDelete, isLoaded }
 
   const formatGroupDate = (date: string) => {
     const today = new Date().toISOString().split("T")[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    const yesterday = new Date(new Date().getTime() - 86400000).toISOString().split("T")[0];
     if (date === today) return "Today";
     if (date === yesterday) return "Yesterday";
     return new Date(date + "T12:00:00").toLocaleDateString("en-US", {
