@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
-import { Navigation } from "@/components/layout/Navigation";
+import { AuthProvider } from "@/components/AuthProvider";
+import { RouteGuard } from "@/components/auth/RouteGuard";
 
 const geist = Geist({ subsets: ["latin"] });
 
@@ -18,8 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className={`${geist.className} bg-gray-50 min-h-full`}>
-        <Navigation />
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</main>
+        <AuthProvider>
+          <RouteGuard>{children}</RouteGuard>
+        </AuthProvider>
       </body>
     </html>
   );

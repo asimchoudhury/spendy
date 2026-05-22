@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LayoutDashboard, Receipt, Menu, X, Wallet, Tags } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutDashboard, Receipt, Menu, X, Wallet, Tags, LogOut } from "lucide-react";
 import { useState, type ComponentType } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 type NavItem = {
   href: string;
@@ -21,7 +22,14 @@ const navItems: NavItem[] = [
 
 export function Navigation() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/login");
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200/60">
@@ -52,6 +60,18 @@ export function Navigation() {
                 </Link>
               );
             })}
+            {user && (
+              <div className="flex items-center gap-2 ml-2 pl-2 border-l border-gray-200">
+                <span className="text-xs text-gray-500 max-w-[140px] truncate">{user.email}</span>
+                <button
+                  onClick={handleSignOut}
+                  className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                  aria-label="Sign out"
+                >
+                  <LogOut size={15} />
+                </button>
+              </div>
+            )}
           </nav>
 
           <button
@@ -83,6 +103,15 @@ export function Navigation() {
                 </Link>
               );
             })}
+            {user && (
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all"
+              >
+                <LogOut size={16} />
+                Sign out
+              </button>
+            )}
           </nav>
         )}
       </div>

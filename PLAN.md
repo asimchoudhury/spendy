@@ -315,7 +315,7 @@ Commit: `chore: cleanup and prepare for review`
 
 ## Current Phase
 
-**Phase 2 — User authentication**
+**Phase 3 — Migrate useCategories to Supabase**
 
 Update this line at the start of each new phase.
 
