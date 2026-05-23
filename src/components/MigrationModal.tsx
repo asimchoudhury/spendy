@@ -5,6 +5,7 @@ import { Database, ArrowDownToLine } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { Expense, CategoryData } from "@/types/expense";
+import { useDataRefresh } from "@/contexts/DataRefreshContext";
 
 const MIGRATED_KEY = "has_migrated";
 
@@ -35,12 +36,9 @@ function categoryToRow(c: CategoryData, userId: string) {
   };
 }
 
-interface MigrationModalProps {
-  onComplete: () => void;
-}
-
-export function MigrationModal({ onComplete }: MigrationModalProps) {
+export function MigrationModal() {
   const { user } = useAuth();
+  const { triggerRefetch } = useDataRefresh();
   const [show, setShow] = useState(false);
   const [localExpenses, setLocalExpenses] = useState<Expense[]>([]);
   const [localCategories, setLocalCategories] = useState<CategoryData[]>([]);
@@ -103,7 +101,7 @@ export function MigrationModal({ onComplete }: MigrationModalProps) {
     localStorage.removeItem("categories");
     localStorage.setItem(MIGRATED_KEY, "1");
     setShow(false);
-    onComplete();
+    triggerRefetch();
   };
 
   const handleSkip = () => {

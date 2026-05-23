@@ -5,6 +5,7 @@ import { CategoryData, Subcategory } from "@/types/expense";
 import { DEFAULT_CATEGORIES, getNextColor, suggestIconForCategory } from "@/utils/categories";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { useDataRefresh } from "@/contexts/DataRefreshContext";
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -49,6 +50,7 @@ function categoryToRow(cat: CategoryData, userId: string) {
 
 export function useCategories() {
   const { user } = useAuth();
+  const { refetchKey } = useDataRefresh();
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,8 @@ export function useCategories() {
 
   useEffect(() => {
     let cancelled = false;
+    // Reset guard so refetchKey changes always trigger a fresh fetch
+    loadedForUser.current = null;
 
     async function run() {
       if (!user) {
@@ -107,7 +111,7 @@ export function useCategories() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, refetchKey]);
 
   const addCategory = useCallback(
     (name: string, icon?: string): CategoryData => {

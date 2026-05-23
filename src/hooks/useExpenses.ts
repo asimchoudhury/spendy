@@ -6,6 +6,7 @@ import { useLocalStorage } from "./useLocalStorage";
 import { generateSampleExpenses } from "@/utils/csv";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { useDataRefresh } from "@/contexts/DataRefreshContext";
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -59,6 +60,7 @@ function expenseToRow(expense: Expense, userId: string) {
 
 export function useExpenses() {
   const { user } = useAuth();
+  const { refetchKey } = useDataRefresh();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,8 @@ export function useExpenses() {
 
   useEffect(() => {
     let cancelled = false;
+    // Reset guard so refetchKey changes always trigger a fresh fetch
+    loadedForUser.current = null;
 
     async function run() {
       if (!user) {
@@ -107,7 +111,7 @@ export function useExpenses() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, refetchKey]);
 
   const seedSampleData = useCallback(() => {
     const samples = generateSampleExpenses();

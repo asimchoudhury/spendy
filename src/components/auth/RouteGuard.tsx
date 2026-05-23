@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Navigation } from "@/components/layout/Navigation";
 import { MigrationModal } from "@/components/MigrationModal";
+import { DataRefreshProvider } from "@/contexts/DataRefreshContext";
 
 const PUBLIC_PATHS = ["/login", "/signup"];
 
@@ -14,7 +15,6 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isPublic = PUBLIC_PATHS.includes(pathname);
-  const [dataKey, setDataKey] = useState(0);
 
   useEffect(() => {
     if (isLoading) return;
@@ -39,10 +39,10 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <>
+    <DataRefreshProvider>
       <Navigation />
-      <main key={dataKey} className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</main>
-      <MigrationModal onComplete={() => setDataKey((k) => k + 1)} />
-    </>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</main>
+      <MigrationModal />
+    </DataRefreshProvider>
   );
 }
