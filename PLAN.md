@@ -315,7 +315,7 @@ Commit: `chore: cleanup and prepare for review`
 
 ## Current Phase
 
-**Phase 5 — One-time localStorage to Supabase migration**
+**Phase 6 — Testing and cleanup**
 
 Update this line at the start of each new phase.
 

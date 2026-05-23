@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Navigation } from "@/components/layout/Navigation";
+import { MigrationModal } from "@/components/MigrationModal";
 
 const PUBLIC_PATHS = ["/login", "/signup"];
 
@@ -40,6 +41,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     <>
       <Navigation />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</main>
+      <MigrationModal />
     </>
   );
 }
