@@ -27,20 +27,27 @@ There are no tests. The only runtime validation is TypeScript (`tsc --noEmit` ru
 
 ## Architecture
 
-**No backend, no database.** Everything persists in `localStorage` under three keys: `expenses`, `expense-filters`, `categories`. Storage is capped at ~5 MB; the app surfaces `QuotaExceededError` gracefully.
+**Database: Supabase (PostgreSQL).** The Supabase JS client talks directly to Supabase from the browser — no custom API routes. Auth is Supabase Auth (email/password). Row Level Security (RLS) ensures each user can only access their own rows.
+
+`expense-filters` is the only thing still in `localStorage` — it is ephemeral UI state that is harmless to lose.
 
 ### Data flow
 
 ```
+Supabase (PostgreSQL)
+  ├─ useExpenses()       // src/hooks/useExpenses.ts
+  │    └─ expenses page, dashboard page
+  └─ useCategories()     // src/hooks/useCategories.ts
+       └─ categories page, expenses page
+
 localStorage
-  └─ useLocalStorage<T>(key, default)    // src/hooks/useLocalStorage.ts
-       ├─ useExpenses()                  // src/hooks/useExpenses.ts
-       │    └─ expenses page, dashboard page
-       └─ useCategories()               // src/hooks/useCategories.ts
-            └─ categories page, expenses page
+  └─ useLocalStorage<ExpenseFilters>("expense-filters", ...)
+       └─ useExpenses() — filters only
 ```
 
-`useLocalStorage` returns `[value, setter, isLoaded]`. The setter always returns `{ quotaExceeded: boolean }` — callers must check this and show `<StorageFullModal>` when true. Never throw on quota errors.
+Both hooks gate renders on `isLoaded` (set after the initial Supabase fetch completes). All mutations are optimistic: local state updates immediately, Supabase write follows in the background. Errors surface via `error: string | null` in the hook's return value.
+
+Auth is provided by `AuthProvider` (context) and enforced by `RouteGuard`. All pages except `/login` and `/signup` require a session.
 
 ### Pages (App Router)
 
@@ -57,13 +64,13 @@ Root layout (`src/app/layout.tsx`) wraps all pages with `<Navigation>` and a `ma
 
 - **Every interactive component needs `"use client"`** at the top — there is no server state.
 - New pages go in `src/app/{route}/page.tsx`.
-- `useLocalStorage` initialises asynchronously (SSR returns `initialValue`); always gate renders on `isLoaded` before showing real data.
-- Expense IDs are `${Date.now()}-${Math.random().toString(36).slice(2, 9)}` — sufficient for client-only use.
+- `useExpenses` and `useCategories` initialise asynchronously (Supabase fetch); always gate renders on `isLoaded` before showing real data.
+- Expense IDs are `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`.
 - Currency is always INR (`formatCurrency` uses `en-IN` locale with the Indian number system).
 
 ### Category system
 
-Categories are stored as `CategoryData[]` with embedded `subcategories[]`. `DEFAULT_CATEGORIES` (six built-ins) are seeded into localStorage on first load by `useCategories`. When a category or subcategory is renamed/deleted, `useExpenses` exposes `bulkRenameCategory`, `bulkMigrateCategory`, etc. to keep existing expenses consistent.
+Categories are stored as `CategoryData[]` with embedded `subcategories[]`. `DEFAULT_CATEGORIES` (six built-ins) are seeded into the Supabase `categories` table the first time a new user's account is empty. When a category or subcategory is renamed/deleted, `useExpenses` exposes `bulkRenameCategory`, `bulkMigrateCategory`, etc. to keep existing expenses consistent.
 
 `suggestIconForCategory(name)` in `src/utils/categories.ts` returns an emoji from `ICON_KEYWORDS` based on keywords in the category name, falling back to `📁`.
 
