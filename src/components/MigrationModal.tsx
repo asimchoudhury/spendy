@@ -35,7 +35,11 @@ function categoryToRow(c: CategoryData, userId: string) {
   };
 }
 
-export function MigrationModal() {
+interface MigrationModalProps {
+  onComplete: () => void;
+}
+
+export function MigrationModal({ onComplete }: MigrationModalProps) {
   const { user } = useAuth();
   const [show, setShow] = useState(false);
   const [localExpenses, setLocalExpenses] = useState<Expense[]>([]);
@@ -98,7 +102,8 @@ export function MigrationModal() {
     localStorage.removeItem("expenses");
     localStorage.removeItem("categories");
     localStorage.setItem(MIGRATED_KEY, "1");
-    window.location.reload();
+    setShow(false);
+    onComplete();
   };
 
   const handleSkip = () => {

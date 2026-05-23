@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
@@ -14,6 +14,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isPublic = PUBLIC_PATHS.includes(pathname);
+  const [dataKey, setDataKey] = useState(0);
 
   useEffect(() => {
     if (isLoading) return;
@@ -40,8 +41,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Navigation />
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</main>
-      <MigrationModal />
+      <main key={dataKey} className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</main>
+      <MigrationModal onComplete={() => setDataKey((k) => k + 1)} />
     </>
   );
 }
