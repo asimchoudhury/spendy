@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useCallback, useEffect, useRef } from "react";
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { Expense, BackupExpense, ExpenseFilters, ExpenseFormData } from "@/types/expense";
 import { useLocalStorage } from "./useLocalStorage";
 import { generateSampleExpenses } from "@/utils/csv";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -16,31 +18,96 @@ const DEFAULT_FILTERS: ExpenseFilters = {
   dateTo: "",
 };
 
+type DbExpenseRow = {
+  id: string;
+  user_id: string;
+  amount: string | number;
+  category: string;
+  subcategory: string | null;
+  description: string | null;
+  date: string;
+  created_at: string;
+  updated_at: string;
+};
+
+function rowToExpense(row: DbExpenseRow): Expense {
+  return {
+    id: row.id,
+    date: row.date,
+    amount: Number(row.amount),
+    category: row.category,
+    subcategory: row.subcategory ?? "General",
+    description: row.description ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function expenseToRow(expense: Expense, userId: string) {
+  return {
+    id: expense.id,
+    user_id: userId,
+    amount: expense.amount,
+    category: expense.category,
+    subcategory: expense.subcategory,
+    description: expense.description,
+    date: expense.date,
+    created_at: expense.createdAt,
+    updated_at: expense.updatedAt,
+  };
+}
+
 export function useExpenses() {
-  const [expenses, setExpenses, isLoaded] = useLocalStorage<Expense[]>(
-    "expenses",
-    []
-  );
+  const { user } = useAuth();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadedForUser = useRef<string | null>(null);
+
+  // filters stay in localStorage — ephemeral UI state
   const [filters, setFilters] = useLocalStorage<ExpenseFilters>(
     "expense-filters",
     DEFAULT_FILTERS
   );
 
-  // Migrate old expenses that lack a subcategory field
-  const migrated = useRef(false);
   useEffect(() => {
-    if (!isLoaded || migrated.current) return;
-    migrated.current = true;
-    const needsMigration = expenses.some((e) => !("subcategory" in e) || !e.subcategory);
-    if (needsMigration) {
-      setExpenses((prev) =>
-        prev.map((e) => ({
-          ...e,
-          subcategory: e.subcategory || "General",
-        }))
-      );
+    let cancelled = false;
+
+    async function run() {
+      if (!user) {
+        setExpenses([]);
+        setIsLoaded(false);
+        loadedForUser.current = null;
+        return;
+      }
+
+      if (loadedForUser.current === user.id) return;
+      loadedForUser.current = user.id;
+
+      const { data, error: fetchError } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false });
+
+      if (cancelled) return;
+
+      if (fetchError) {
+        setError(fetchError.message);
+        setIsLoaded(true);
+        return;
+      }
+
+      setExpenses((data as DbExpenseRow[]).map(rowToExpense));
+      setIsLoaded(true);
     }
-  }, [isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const seedSampleData = useCallback(() => {
     const samples = generateSampleExpenses();
@@ -52,7 +119,19 @@ export function useExpenses() {
       updatedAt: now,
     }));
     setExpenses(seeded);
-  }, [setExpenses]);
+    supabase
+      .from("expenses")
+      .delete()
+      .eq("user_id", user!.id)
+      .then(({ error: delErr }) => {
+        if (delErr) { setError(delErr.message); return; }
+        const rows = seeded.map((e) => expenseToRow(e, user!.id));
+        supabase
+          .from("expenses")
+          .insert(rows)
+          .then(({ error: insErr }) => { if (insErr) setError(insErr.message); });
+      });
+  }, [user]);
 
   const addExpense = useCallback(
     (data: ExpenseFormData): { expense?: Expense; quotaExceeded?: boolean } => {
@@ -67,16 +146,20 @@ export function useExpenses() {
         createdAt: now,
         updatedAt: now,
       };
-      const result = setExpenses((prev) => [expense, ...prev]);
-      if (result.quotaExceeded) return { quotaExceeded: true };
+      setExpenses((prev) => [expense, ...prev]);
+      supabase
+        .from("expenses")
+        .insert(expenseToRow(expense, user!.id))
+        .then(({ error: e }) => { if (e) setError(e.message); });
       return { expense };
     },
-    [setExpenses]
+    [user]
   );
 
   const updateExpense = useCallback(
     (id: string, data: ExpenseFormData): { quotaExceeded?: boolean } => {
-      return setExpenses((prev) =>
+      const updatedAt = new Date().toISOString();
+      setExpenses((prev) =>
         prev.map((e) =>
           e.id === id
             ? {
@@ -86,23 +169,42 @@ export function useExpenses() {
                 category: data.category,
                 subcategory: data.subcategory || "General",
                 description: data.description.trim(),
-                updatedAt: new Date().toISOString(),
+                updatedAt,
               }
             : e
         )
       );
+      supabase
+        .from("expenses")
+        .update({
+          date: data.date,
+          amount: parseFloat(data.amount),
+          category: data.category,
+          subcategory: data.subcategory || "General",
+          description: data.description.trim(),
+          updated_at: updatedAt,
+        })
+        .eq("id", id)
+        .eq("user_id", user!.id)
+        .then(({ error: e }) => { if (e) setError(e.message); });
+      return {};
     },
-    [setExpenses]
+    [user]
   );
 
   const deleteExpense = useCallback(
     (id: string) => {
       setExpenses((prev) => prev.filter((e) => e.id !== id));
+      supabase
+        .from("expenses")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user!.id)
+        .then(({ error: e }) => { if (e) setError(e.message); });
     },
-    [setExpenses]
+    [user]
   );
 
-  // Smart import: merge by ID — skip duplicates, add new
   const smartImportExpenses = useCallback(
     (backupExpenses: BackupExpense[]): { added: number; skipped: number; quotaExceeded?: boolean } => {
       const existingIds = new Set(expenses.map((e) => e.id));
@@ -119,14 +221,19 @@ export function useExpenses() {
           createdAt: e.createdAt || now,
           updatedAt: e.updatedAt || now,
         }));
-      const result = setExpenses((prev) => [...prev, ...toAdd]);
-      if (result.quotaExceeded) return { added: 0, skipped: backupExpenses.length, quotaExceeded: true };
+      if (toAdd.length > 0) {
+        setExpenses((prev) => [...prev, ...toAdd]);
+        const rows = toAdd.map((e) => expenseToRow(e, user!.id));
+        supabase
+          .from("expenses")
+          .insert(rows)
+          .then(({ error: e }) => { if (e) setError(e.message); });
+      }
       return { added: toAdd.length, skipped: backupExpenses.length - toAdd.length };
     },
-    [expenses, setExpenses]
+    [expenses, user]
   );
 
-  // Replace all: overwrite all expenses with backup data
   const replaceAllExpenses = useCallback(
     (backupExpenses: BackupExpense[]): { quotaExceeded?: boolean } => {
       const now = new Date().toISOString();
@@ -140,74 +247,105 @@ export function useExpenses() {
         createdAt: e.createdAt || now,
         updatedAt: e.updatedAt || now,
       }));
-      return setExpenses(normalized);
+      setExpenses(normalized);
+      supabase
+        .from("expenses")
+        .delete()
+        .eq("user_id", user!.id)
+        .then(({ error: delErr }) => {
+          if (delErr) { setError(delErr.message); return; }
+          if (normalized.length === 0) return;
+          const rows = normalized.map((e) => expenseToRow(e, user!.id));
+          supabase
+            .from("expenses")
+            .insert(rows)
+            .then(({ error: insErr }) => { if (insErr) setError(insErr.message); });
+        });
+      return {};
     },
-    [setExpenses]
+    [user]
   );
 
-  // Move all expenses of a deleted category to another category
   const bulkMigrateCategory = useCallback(
     (fromCategory: string, toCategory: string, toSubcategory: string) => {
+      const now = new Date().toISOString();
       setExpenses((prev) =>
         prev.map((e) =>
           e.category === fromCategory
-            ? {
-                ...e,
-                category: toCategory,
-                subcategory: toSubcategory,
-                updatedAt: new Date().toISOString(),
-              }
+            ? { ...e, category: toCategory, subcategory: toSubcategory, updatedAt: now }
             : e
         )
       );
+      supabase
+        .from("expenses")
+        .update({ category: toCategory, subcategory: toSubcategory, updated_at: now })
+        .eq("user_id", user!.id)
+        .eq("category", fromCategory)
+        .then(({ error: e }) => { if (e) setError(e.message); });
     },
-    [setExpenses]
+    [user]
   );
 
-  // Move all expenses of a deleted subcategory to another subcategory within the same category
   const bulkMigrateSubcategory = useCallback(
     (category: string, fromSubcategory: string, toSubcategory: string) => {
+      const now = new Date().toISOString();
       setExpenses((prev) =>
         prev.map((e) =>
           e.category === category && e.subcategory === fromSubcategory
-            ? {
-                ...e,
-                subcategory: toSubcategory,
-                updatedAt: new Date().toISOString(),
-              }
+            ? { ...e, subcategory: toSubcategory, updatedAt: now }
             : e
         )
       );
+      supabase
+        .from("expenses")
+        .update({ subcategory: toSubcategory, updated_at: now })
+        .eq("user_id", user!.id)
+        .eq("category", category)
+        .eq("subcategory", fromSubcategory)
+        .then(({ error: e }) => { if (e) setError(e.message); });
     },
-    [setExpenses]
+    [user]
   );
 
-  // Rename category across all expenses when a category name changes
   const bulkRenameCategory = useCallback(
     (oldName: string, newName: string) => {
+      const now = new Date().toISOString();
       setExpenses((prev) =>
         prev.map((e) =>
           e.category === oldName
-            ? { ...e, category: newName, updatedAt: new Date().toISOString() }
+            ? { ...e, category: newName, updatedAt: now }
             : e
         )
       );
+      supabase
+        .from("expenses")
+        .update({ category: newName, updated_at: now })
+        .eq("user_id", user!.id)
+        .eq("category", oldName)
+        .then(({ error: e }) => { if (e) setError(e.message); });
     },
-    [setExpenses]
+    [user]
   );
 
-  // Rename subcategory across all expenses when a subcategory name changes
   const bulkRenameSubcategory = useCallback(
     (category: string, oldName: string, newName: string) => {
+      const now = new Date().toISOString();
       setExpenses((prev) =>
         prev.map((e) =>
           e.category === category && e.subcategory === oldName
-            ? { ...e, subcategory: newName, updatedAt: new Date().toISOString() }
+            ? { ...e, subcategory: newName, updatedAt: now }
             : e
         )
       );
+      supabase
+        .from("expenses")
+        .update({ subcategory: newName, updated_at: now })
+        .eq("user_id", user!.id)
+        .eq("category", category)
+        .eq("subcategory", oldName)
+        .then(({ error: e }) => { if (e) setError(e.message); });
     },
-    [setExpenses]
+    [user]
   );
 
   const filteredExpenses = useMemo(() => {
@@ -295,6 +433,7 @@ export function useExpenses() {
     bulkRenameSubcategory,
     seedSampleData,
     isLoaded,
+    error,
     stats,
   };
 }

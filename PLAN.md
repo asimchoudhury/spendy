@@ -315,7 +315,7 @@ Commit: `chore: cleanup and prepare for review`
 
 ## Current Phase
 
-**Phase 4 — Migrate useExpenses to Supabase**
+**Phase 5 — One-time localStorage to Supabase migration**
 
 Update this line at the start of each new phase.
 
