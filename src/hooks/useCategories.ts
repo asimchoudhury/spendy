@@ -1,29 +1,113 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CategoryData, Subcategory } from "@/types/expense";
-import { useLocalStorage } from "./useLocalStorage";
 import { DEFAULT_CATEGORIES, getNextColor, suggestIconForCategory } from "@/utils/categories";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function useCategories() {
-  const [categories, setCategories, isLoaded] = useLocalStorage<CategoryData[]>(
-    "categories",
-    []
-  );
+type DbRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  bg_color: string;
+  text_color: string;
+  icon: string;
+  subcategories: Subcategory[];
+  created_at: string;
+};
 
-  const initialized = useRef(false);
+function rowToCategory(row: DbRow): CategoryData {
+  return {
+    id: row.id,
+    name: row.name,
+    color: row.color,
+    bgColor: row.bg_color,
+    textColor: row.text_color,
+    icon: row.icon,
+    subcategories: row.subcategories ?? [],
+  };
+}
+
+function categoryToRow(cat: CategoryData, userId: string) {
+  return {
+    id: cat.id,
+    user_id: userId,
+    name: cat.name,
+    color: cat.color,
+    bg_color: cat.bgColor,
+    text_color: cat.textColor,
+    icon: cat.icon,
+    subcategories: cat.subcategories,
+  };
+}
+
+export function useCategories() {
+  const { user } = useAuth();
+  const [categories, setCategories] = useState<CategoryData[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadedForUser = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isLoaded || initialized.current) return;
-    initialized.current = true;
-    if (categories.length === 0) {
-      setCategories(DEFAULT_CATEGORIES);
+    let cancelled = false;
+
+    async function run() {
+      if (!user) {
+        setCategories([]);
+        setIsLoaded(false);
+        loadedForUser.current = null;
+        return;
+      }
+
+      if (loadedForUser.current === user.id) return;
+      loadedForUser.current = user.id;
+
+      const { data, error: fetchError } = await supabase
+        .from("categories")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at");
+
+      if (cancelled) return;
+
+      if (fetchError) {
+        setError(fetchError.message);
+        setIsLoaded(true);
+        return;
+      }
+
+      if ((data as DbRow[]).length === 0) {
+        const rows = DEFAULT_CATEGORIES.map((cat) => categoryToRow(cat, user.id));
+        const { data: inserted, error: insertError } = await supabase
+          .from("categories")
+          .insert(rows)
+          .select();
+
+        if (cancelled) return;
+
+        if (insertError) {
+          setError(insertError.message);
+        } else {
+          setCategories((inserted as DbRow[]).map(rowToCategory));
+        }
+      } else {
+        setCategories((data as DbRow[]).map(rowToCategory));
+      }
+      setIsLoaded(true);
     }
-  }, [isLoaded, categories.length, setCategories]);
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const addCategory = useCallback(
     (name: string, icon?: string): CategoryData => {
@@ -36,9 +120,15 @@ export function useCategories() {
         subcategories: [{ id: generateId(), name: "General" }],
       };
       setCategories((prev) => [...prev, newCat]);
+      supabase
+        .from("categories")
+        .insert(categoryToRow(newCat, user!.id))
+        .then(({ error: e }) => {
+          if (e) setError(e.message);
+        });
       return newCat;
     },
-    [categories.length, setCategories]
+    [categories.length, user]
   );
 
   const updateCategory = useCallback(
@@ -50,64 +140,104 @@ export function useCategories() {
             : c
         )
       );
+      const patch: Record<string, string> = { name: name.trim() };
+      if (icon !== undefined) patch.icon = icon;
+      supabase
+        .from("categories")
+        .update(patch)
+        .eq("id", id)
+        .eq("user_id", user!.id)
+        .then(({ error: e }) => {
+          if (e) setError(e.message);
+        });
     },
-    [setCategories]
+    [user]
   );
 
   const deleteCategory = useCallback(
     (id: string): void => {
       setCategories((prev) => prev.filter((c) => c.id !== id));
+      supabase
+        .from("categories")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user!.id)
+        .then(({ error: e }) => {
+          if (e) setError(e.message);
+        });
     },
-    [setCategories]
+    [user]
   );
 
   const addSubcategory = useCallback(
     (categoryId: string, name: string): Subcategory => {
       const sub: Subcategory = { id: generateId(), name: name.trim() };
+      const cat = categories.find((c) => c.id === categoryId);
+      const updatedSubs = cat ? [...cat.subcategories, sub] : [sub];
       setCategories((prev) =>
         prev.map((c) =>
-          c.id === categoryId
-            ? { ...c, subcategories: [...c.subcategories, sub] }
-            : c
+          c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
+      supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user!.id)
+        .then(({ error: e }) => {
+          if (e) setError(e.message);
+        });
       return sub;
     },
-    [setCategories]
+    [categories, user]
   );
 
   const updateSubcategory = useCallback(
     (categoryId: string, subcategoryId: string, name: string): void => {
+      const cat = categories.find((c) => c.id === categoryId);
+      const updatedSubs = cat
+        ? cat.subcategories.map((s) =>
+            s.id === subcategoryId ? { ...s, name: name.trim() } : s
+          )
+        : [];
       setCategories((prev) =>
         prev.map((c) =>
-          c.id === categoryId
-            ? {
-                ...c,
-                subcategories: c.subcategories.map((s) =>
-                  s.id === subcategoryId ? { ...s, name: name.trim() } : s
-                ),
-              }
-            : c
+          c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
+      supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user!.id)
+        .then(({ error: e }) => {
+          if (e) setError(e.message);
+        });
     },
-    [setCategories]
+    [categories, user]
   );
 
   const deleteSubcategory = useCallback(
     (categoryId: string, subcategoryId: string): void => {
+      const cat = categories.find((c) => c.id === categoryId);
+      const updatedSubs = cat
+        ? cat.subcategories.filter((s) => s.id !== subcategoryId)
+        : [];
       setCategories((prev) =>
         prev.map((c) =>
-          c.id === categoryId
-            ? {
-                ...c,
-                subcategories: c.subcategories.filter((s) => s.id !== subcategoryId),
-              }
-            : c
+          c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
+      supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user!.id)
+        .then(({ error: e }) => {
+          if (e) setError(e.message);
+        });
     },
-    [setCategories]
+    [categories, user]
   );
 
   const getSubcategories = useCallback(
@@ -118,30 +248,35 @@ export function useCategories() {
     [categories]
   );
 
-  // Bulk-add categories that don't already exist (used during import)
   const importCategories = useCallback(
     (categoryNames: string[]): void => {
-      setCategories((prev) => {
-        const existingNames = new Set(prev.map((c) => c.name));
-        const newCats: CategoryData[] = categoryNames
-          .filter((name) => !existingNames.has(name))
-          .map((name, i) => ({
-            id: generateId(),
-            name,
-            ...getNextColor(prev.length + i),
-            icon: suggestIconForCategory(name),
-            subcategories: [{ id: generateId(), name: "General" }],
-          }));
-        if (newCats.length === 0) return prev;
-        return [...prev, ...newCats];
-      });
+      const existingNames = new Set(categories.map((c) => c.name));
+      const newCats: CategoryData[] = categoryNames
+        .filter((name) => !existingNames.has(name))
+        .map((name, i) => ({
+          id: generateId(),
+          name,
+          ...getNextColor(categories.length + i),
+          icon: suggestIconForCategory(name),
+          subcategories: [{ id: generateId(), name: "General" }],
+        }));
+      if (newCats.length === 0) return;
+      setCategories((prev) => [...prev, ...newCats]);
+      const rows = newCats.map((cat) => categoryToRow(cat, user!.id));
+      supabase
+        .from("categories")
+        .insert(rows)
+        .then(({ error: e }) => {
+          if (e) setError(e.message);
+        });
     },
-    [setCategories]
+    [categories, user]
   );
 
   return {
     categories,
     isLoaded,
+    error,
     addCategory,
     updateCategory,
     deleteCategory,
