@@ -8,7 +8,7 @@ import { Navigation } from "@/components/layout/Navigation";
 import { MigrationModal } from "@/components/MigrationModal";
 import { DataRefreshProvider } from "@/contexts/DataRefreshContext";
 
-const PUBLIC_PATHS = ["/login", "/signup"];
+const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth/callback"];
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
