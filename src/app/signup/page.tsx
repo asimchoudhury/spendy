@@ -10,6 +10,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isDuplicate, setIsDuplicate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -17,6 +18,7 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsDuplicate(false);
     if (password !== confirm) {
       setError("Passwords do not match.");
       return;
@@ -28,7 +30,7 @@ export default function SignupPage() {
     if (signUpError) {
       const msg = signUpError.message.toLowerCase();
       if (msg.includes("already registered") || msg.includes("already exists")) {
-        setError("An account with this email already exists. Try logging in instead.");
+        setIsDuplicate(true);
       } else {
         setError(signUpError.message);
       }
@@ -37,7 +39,7 @@ export default function SignupPage() {
 
     // Duplicate email with email confirmation enabled: identities array is empty
     if (data.user && (data.user.identities?.length ?? 0) === 0) {
-      setError("An account with this email already exists. Try logging in instead.");
+      setIsDuplicate(true);
       return;
     }
 
@@ -76,6 +78,9 @@ export default function SignupPage() {
             <p className="text-sm font-medium text-gray-900 mb-4">{email}</p>
             <p className="text-sm text-gray-500">
               Click the link in the email to verify your account before signing in.
+            </p>
+            <p className="text-xs text-gray-400 mt-3">
+              Don&apos;t forget to check your junk or spam folder.
             </p>
             <p className="text-sm text-center text-gray-500 mt-6">
               Already verified?{" "}
@@ -136,6 +141,16 @@ export default function SignupPage() {
                 />
               </div>
 
+              {isDuplicate && (
+                <div className="text-sm bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+                  <p className="text-amber-800">
+                    An account with this email already exists. If you&apos;ve already verified it, please sign in. Otherwise check your email for the verification link.
+                  </p>
+                  <p className="text-amber-600 mt-1 text-xs">
+                    Don&apos;t forget to check your junk or spam folder.
+                  </p>
+                </div>
+              )}
               {error && (
                 <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
               )}

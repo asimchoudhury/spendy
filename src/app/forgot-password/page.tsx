@@ -16,8 +16,10 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
 
+    // NOTE: this URL must also be added in Supabase dashboard →
+    // Authentication → URL Configuration → Email Templates → Reset Password
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: `${window.location.origin}/auth/reset-password`,
     });
 
     setLoading(false);
@@ -53,6 +55,9 @@ export default function ForgotPasswordPage() {
             <p className="text-sm font-medium text-gray-900 mb-4">{email}</p>
             <p className="text-sm text-gray-500">
               Click the link in the email to reset your password.
+            </p>
+            <p className="text-xs text-gray-400 mt-3">
+              Don&apos;t forget to check your junk or spam folder.
             </p>
             <p className="text-sm text-center text-gray-500 mt-6">
               <Link href="/login" className="text-violet-600 hover:text-violet-700 font-medium">

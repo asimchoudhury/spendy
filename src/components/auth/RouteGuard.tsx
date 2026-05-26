@@ -8,7 +8,10 @@ import { Navigation } from "@/components/layout/Navigation";
 import { MigrationModal } from "@/components/MigrationModal";
 import { DataRefreshProvider } from "@/contexts/DataRefreshContext";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth/callback"];
+const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth/callback", "/auth/reset-password"];
+// These public paths are part of an auth flow that may run while a session exists,
+// so we must not redirect authenticated users away from them.
+const NO_AUTH_REDIRECT = new Set(["/auth/reset-password"]);
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -19,8 +22,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
     if (!user && !isPublic) router.replace("/login");
-    if (user && isPublic) router.replace("/");
-  }, [isLoading, user, isPublic, router]);
+    if (user && isPublic && !NO_AUTH_REDIRECT.has(pathname)) router.replace("/");
+  }, [isLoading, user, isPublic, pathname, router]);
 
   if (isLoading) {
     return (
