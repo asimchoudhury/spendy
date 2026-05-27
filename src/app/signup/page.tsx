@@ -37,7 +37,9 @@ export default function SignupPage() {
       return;
     }
 
-    // Duplicate email with email confirmation enabled: identities array is empty
+    // Supabase signals duplicate email (unverified existing account) via empty identities.
+    // When user is null, we can't distinguish a new signup from a verified existing email
+    // (Supabase returns null for both to prevent enumeration), so we fall through to success.
     if (data.user && (data.user.identities?.length ?? 0) === 0) {
       setIsDuplicate(true);
       return;
@@ -146,7 +148,7 @@ export default function SignupPage() {
                   <p className="text-amber-800">
                     An account with this email already exists. If you&apos;ve already verified it, please sign in. Otherwise check your email for the verification link.
                   </p>
-                  <p className="text-amber-600 mt-1 text-xs">
+                  <p className="text-amber-600 mt-4 text-xs">
                     Don&apos;t forget to check your junk or spam folder.
                   </p>
                 </div>
@@ -157,7 +159,7 @@ export default function SignupPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || isDuplicate}
                 className="w-full py-2.5 px-4 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 {loading && <Loader2 size={15} className="animate-spin" />}

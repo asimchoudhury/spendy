@@ -11,6 +11,11 @@ import { supabase } from "@/lib/supabase";
 // Set the redirect URL to: http://localhost:3000/auth/reset-password
 // (and your production domain equivalent, e.g. https://your-app.vercel.app/auth/reset-password)
 
+// Capture the hash at module load time — Supabase's async initialize() calls
+// history.replaceState to wipe auth tokens from the URL, so by the time a
+// useEffect runs the hash may already be gone.
+const _initialHash = typeof window !== "undefined" ? window.location.hash : "";
+
 type Stage = "loading" | "form" | "success" | "error";
 
 export default function ResetPasswordPage() {
@@ -25,20 +30,59 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("code");
 
-    if (!code) {
+    if (code) {
+      // PKCE flow: exchange code for session
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          setInitError("This reset link has expired or is invalid. Please request a new one.");
+          setStage("error");
+        } else {
+          setStage("form");
+        }
+      });
+      return;
+    }
+
+    // Implicit flow: use the hash captured at module load (before Supabase cleared it)
+    const hashParams = new URLSearchParams(_initialHash.slice(1));
+    if (hashParams.get("type") !== "recovery" || !hashParams.get("access_token")) {
       setInitError("Invalid or missing reset link. Please request a new one.");
       setStage("error");
       return;
     }
 
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) {
-        setInitError("This reset link has expired or is invalid. Please request a new one.");
-        setStage("error");
-      } else {
+    // Recovery link confirmed. Supabase processes the hash asynchronously and fires
+    // PASSWORD_RECOVERY via onAuthStateChange when the session is ready.
+    let settled = false;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY" && !settled) {
+        settled = true;
         setStage("form");
       }
     });
+
+    // Fallback: event may have already fired before we subscribed
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!settled && session) {
+        settled = true;
+        setStage("form");
+      }
+    });
+
+    // Final fallback: token is invalid/expired — no event will ever fire
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        setInitError("This reset link has expired or is invalid. Please request a new one.");
+        setStage("error");
+      }
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
