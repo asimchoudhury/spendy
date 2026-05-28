@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState } from "react";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useCategories } from "@/hooks/useCategories";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
@@ -8,13 +8,11 @@ import { ExpenseFiltersBar } from "@/components/expenses/ExpenseFilters";
 import { Modal } from "@/components/ui/Modal";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
-import { StorageFullModal } from "@/components/storage/StorageFullModal";
 import { SmartImportModal } from "@/components/import/SmartImportModal";
 import { Expense, ExpenseFormData } from "@/types/expense";
 import { formatCurrency } from "@/utils/currency";
 import { ExportModal } from "@/components/export/ExportModal";
 import { exportJSON } from "@/utils/exportFormats";
-import { getStorageUsage } from "@/utils/storage";
 import { Plus, Upload, Trash2, Download, FileJson } from "lucide-react";
 
 export default function ExpensesPage() {
@@ -36,50 +34,18 @@ export default function ExpensesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showStorageFull, setShowStorageFull] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const { toasts, addToast, dismiss } = useToast();
 
-  // Highlight import/delete buttons when navigated here from StorageFullModal
-  const importBtnRef = useRef<HTMLButtonElement>(null);
-  const [highlighted, setHighlighted] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const flag = sessionStorage.getItem("spendy-highlight-actions");
-    if (flag) {
-      sessionStorage.removeItem("spendy-highlight-actions");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHighlighted(true);
-      setTimeout(() => {
-        importBtnRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 300);
-      setTimeout(() => setHighlighted(false), 4000);
-    }
-  }, []);
-
-  const refreshStorage = useCallback(() => {
-    getStorageUsage(); // lightweight — just keeps cache warm; no state needed here
-  }, []);
-
   const handleAdd = (data: ExpenseFormData) => {
-    const result = addExpense(data);
-    if (result.quotaExceeded) {
-      setShowStorageFull(true);
-      return;
-    }
-    refreshStorage();
+    addExpense(data);
     setShowAddForm(false);
     addToast("success", "Expense added!");
   };
 
   const handleUpdate = (data: ExpenseFormData) => {
     if (!editingExpense) return;
-    const result = updateExpense(editingExpense.id, data);
-    if (result.quotaExceeded) {
-      setShowStorageFull(true);
-      return;
-    }
+    updateExpense(editingExpense.id, data);
     setEditingExpense(null);
     addToast("success", "Expense updated!");
   };
@@ -98,16 +64,7 @@ export default function ExpensesPage() {
     exportJSON(expenses, `spendy-backup-${today}`);
   };
 
-  const handleGoToExpenses = () => {
-    // Already on this page — just close the modal
-    setShowStorageFull(false);
-  };
-
   const filteredTotal = filteredExpenses.reduce((s, e) => s + e.amount, 0);
-
-  const highlightClass = highlighted
-    ? "ring-2 ring-violet-500 ring-offset-2 animate-pulse"
-    : "";
 
   return (
     <>
@@ -131,9 +88,8 @@ export default function ExpensesPage() {
             </button>
             <div className="flex flex-col items-end gap-1">
               <button
-                ref={importBtnRef}
                 onClick={() => setShowImport(true)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-medium transition-colors ${highlightClass}`}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-medium transition-colors"
               >
                 <FileJson size={15} />
                 <span className="hidden sm:inline">Import JSON Backup</span>
@@ -261,7 +217,7 @@ export default function ExpensesPage() {
             </button>
             <button
               onClick={confirmDelete}
-              className={`flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors ${highlightClass}`}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
             >
               Delete
             </button>
@@ -286,13 +242,6 @@ export default function ExpensesPage() {
         onImportCategories={importCategories}
         onSuccess={(msg) => addToast("success", msg)}
         onError={(msg) => addToast("error", msg)}
-      />
-
-      <StorageFullModal
-        isOpen={showStorageFull}
-        onClose={() => setShowStorageFull(false)}
-        onExportJSON={handleExportJSON}
-        onGoToExpenses={handleGoToExpenses}
       />
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />

@@ -138,7 +138,7 @@ export function useExpenses() {
   }, [user]);
 
   const addExpense = useCallback(
-    (data: ExpenseFormData): { expense?: Expense; quotaExceeded?: boolean } => {
+    (data: ExpenseFormData): Expense => {
       const now = new Date().toISOString();
       const expense: Expense = {
         id: generateId(),
@@ -155,13 +155,13 @@ export function useExpenses() {
         .from("expenses")
         .insert(expenseToRow(expense, user!.id))
         .then(({ error: e }) => { if (e) setError(e.message); });
-      return { expense };
+      return expense;
     },
     [user]
   );
 
   const updateExpense = useCallback(
-    (id: string, data: ExpenseFormData): { quotaExceeded?: boolean } => {
+    (id: string, data: ExpenseFormData): void => {
       const updatedAt = new Date().toISOString();
       setExpenses((prev) =>
         prev.map((e) =>
@@ -191,7 +191,6 @@ export function useExpenses() {
         .eq("id", id)
         .eq("user_id", user!.id)
         .then(({ error: e }) => { if (e) setError(e.message); });
-      return {};
     },
     [user]
   );
@@ -210,7 +209,7 @@ export function useExpenses() {
   );
 
   const smartImportExpenses = useCallback(
-    (backupExpenses: BackupExpense[]): { added: number; skipped: number; quotaExceeded?: boolean } => {
+    (backupExpenses: BackupExpense[]): { added: number; skipped: number } => {
       const existingIds = new Set(expenses.map((e) => e.id));
       const now = new Date().toISOString();
       const toAdd: Expense[] = backupExpenses
@@ -239,7 +238,7 @@ export function useExpenses() {
   );
 
   const replaceAllExpenses = useCallback(
-    (backupExpenses: BackupExpense[]): { quotaExceeded?: boolean } => {
+    (backupExpenses: BackupExpense[]): void => {
       const now = new Date().toISOString();
       const normalized: Expense[] = backupExpenses.map((e) => ({
         id: e.id || generateId(),
@@ -265,7 +264,6 @@ export function useExpenses() {
             .insert(rows)
             .then(({ error: insErr }) => { if (insErr) setError(insErr.message); });
         });
-      return {};
     },
     [user]
   );

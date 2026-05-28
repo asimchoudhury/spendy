@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useCategories } from "@/hooks/useCategories";
@@ -13,9 +13,6 @@ import { RecentExpenses } from "@/components/dashboard/RecentExpenses";
 import { Modal } from "@/components/ui/Modal";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
-import { StorageWarningBanner } from "@/components/storage/StorageWarningBanner";
-import { StorageFullModal } from "@/components/storage/StorageFullModal";
-import { getStorageUsage } from "@/utils/storage";
 import { exportJSON } from "@/utils/exportFormats";
 import { Plus, Sparkles } from "lucide-react";
 
@@ -23,49 +20,23 @@ export default function DashboardPage() {
   const { expenses, addExpense, seedSampleData, isLoaded } = useExpenses();
   const { categories } = useCategories();
   const [showForm, setShowForm] = useState(false);
-  const [showStorageFull, setShowStorageFull] = useState(false);
-  const [storagePercentage, setStoragePercentage] = useState(0);
   const { toasts, addToast, dismiss } = useToast();
   const router = useRouter();
 
-  const refreshStorage = useCallback(() => {
-    setStoragePercentage(getStorageUsage().percentage);
-  }, []);
-
-  // Check storage on load and whenever expenses change
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (isLoaded) refreshStorage();
-  }, [isLoaded, expenses, refreshStorage]);
-
   const handleAdd = (data: Parameters<typeof addExpense>[0]) => {
-    const result = addExpense(data);
-    if (result.quotaExceeded) {
-      setShowStorageFull(true);
-      // Form stays open — user's data is preserved
-      return;
-    }
-    refreshStorage();
+    addExpense(data);
     setShowForm(false);
     addToast("success", "Expense added successfully!");
   };
 
   const handleSeed = () => {
     seedSampleData();
-    refreshStorage();
     addToast("success", "Sample data loaded! Explore the dashboard.");
   };
 
   const handleExportJSON = () => {
     const today = new Date().toISOString().split("T")[0];
     exportJSON(expenses, `spendy-backup-${today}`);
-  };
-
-  const handleGoToExpenses = () => {
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("spendy-highlight-actions", "1");
-    }
-    router.push("/expenses");
   };
 
   return (
@@ -99,14 +70,6 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-
-        {/* Storage warning — only shown at 90%+ */}
-        {isLoaded && storagePercentage >= 90 && (
-          <StorageWarningBanner
-            percentage={storagePercentage}
-            onExportJSON={handleExportJSON}
-          />
-        )}
 
         {!isLoaded ? (
           <div className="flex flex-col gap-4">
@@ -151,13 +114,6 @@ export default function DashboardPage() {
           onCancel={() => setShowForm(false)}
         />
       </Modal>
-
-      <StorageFullModal
-        isOpen={showStorageFull}
-        onClose={() => setShowStorageFull(false)}
-        onExportJSON={handleExportJSON}
-        onGoToExpenses={handleGoToExpenses}
-      />
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </>

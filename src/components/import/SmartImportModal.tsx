@@ -3,7 +3,6 @@
 import { useState, useRef } from "react";
 import { X, Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Expense, BackupExpense, CategoryData } from "@/types/expense";
-import { estimatePostImportPercentage } from "@/utils/storage";
 
 interface SpendyBackup {
   generatedBy: string;
@@ -16,7 +15,6 @@ interface ImportPreview {
   toAdd: BackupExpense[];
   toSkip: BackupExpense[];
   newCategoryNames: string[];
-  estimatedPercentage: number;
 }
 
 interface SmartImportModalProps {
@@ -24,10 +22,8 @@ interface SmartImportModalProps {
   onClose: () => void;
   currentExpenses: Expense[];
   currentCategories: CategoryData[];
-  onSmartImport: (
-    backupExpenses: BackupExpense[]
-  ) => { added: number; skipped: number; quotaExceeded?: boolean };
-  onReplaceAll: (backupExpenses: BackupExpense[]) => { quotaExceeded?: boolean };
+  onSmartImport: (backupExpenses: BackupExpense[]) => { added: number; skipped: number };
+  onReplaceAll: (backupExpenses: BackupExpense[]) => void;
   onImportCategories: (categoryNames: string[]) => void;
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
@@ -63,10 +59,7 @@ function buildPreview(
   const backupCategoryNames = [...new Set(backup.expenses.map((e) => e.category))];
   const newCategoryNames = backupCategoryNames.filter((n) => !existingCategoryNames.has(n));
 
-  const additionalJson = JSON.stringify(toAdd);
-  const estimatedPercentage = estimatePostImportPercentage(additionalJson);
-
-  return { backup, toAdd, toSkip, newCategoryNames, estimatedPercentage };
+  return { backup, toAdd, toSkip, newCategoryNames };
 }
 
 export function SmartImportModal({
@@ -124,11 +117,6 @@ export function SmartImportModal({
     const result = onSmartImport(preview.backup.expenses as BackupExpense[]);
     setIsProcessing(false);
 
-    if (result.quotaExceeded) {
-      onError("Storage is full. Delete some expenses first, then try importing again.");
-      return;
-    }
-
     onSuccess(
       `✅ Smart Import complete! Added ${result.added} new expense${result.added !== 1 ? "s" : ""}, skipped ${result.skipped} duplicate${result.skipped !== 1 ? "s" : ""}.`
     );
@@ -143,14 +131,8 @@ export function SmartImportModal({
       onImportCategories(preview.newCategoryNames);
     }
 
-    const result = onReplaceAll(preview.backup.expenses as BackupExpense[]);
+    onReplaceAll(preview.backup.expenses as BackupExpense[]);
     setIsProcessing(false);
-
-    if (result.quotaExceeded) {
-      onError("Storage is full. Free up space first.");
-      setShowReplaceConfirm(false);
-      return;
-    }
 
     onSuccess(
       `✅ Data replaced successfully! Imported ${preview.backup.expenses.length} expense${preview.backup.expenses.length !== 1 ? "s" : ""} from backup.`
@@ -288,22 +270,8 @@ export function SmartImportModal({
                           : "No new categories to add"
                       }
                     />
-                    <Row
-                      icon="💾"
-                      label={`Storage after import: ~${Math.round(preview.estimatedPercentage)}% full`}
-                    />
                   </div>
                 </div>
-
-                {preview.estimatedPercentage >= 90 && (
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                    <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-800">
-                      ⚠️ Storage will be ~{Math.round(preview.estimatedPercentage)}% full after import.
-                      Consider deleting old expenses first.
-                    </p>
-                  </div>
-                )}
 
                 <button
                   onClick={() => { setPreview(null); setParseError(null); }}

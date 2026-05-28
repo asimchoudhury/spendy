@@ -86,8 +86,17 @@ export function useCategories() {
         return;
       }
 
-      if ((data as DbRow[]).length === 0) {
-        const rows = DEFAULT_CATEGORIES.map((cat) => categoryToRow(cat, user.id));
+      const existing = (data as DbRow[]).map(rowToCategory);
+      const existingNames = new Set(existing.map((c) => c.name));
+      const missing = DEFAULT_CATEGORIES.filter((c) => !existingNames.has(c.name));
+
+      if (missing.length > 0) {
+        const seeded = missing.map((cat) => ({
+          ...cat,
+          id: generateId(),
+          subcategories: cat.subcategories.map((s) => ({ ...s, id: generateId() })),
+        }));
+        const rows = seeded.map((cat) => categoryToRow(cat, user.id));
         const { data: inserted, error: insertError } = await supabase
           .from("categories")
           .insert(rows)
@@ -97,11 +106,12 @@ export function useCategories() {
 
         if (insertError) {
           setError(insertError.message);
+          setCategories(existing);
         } else {
-          setCategories((inserted as DbRow[]).map(rowToCategory));
+          setCategories([...existing, ...(inserted as DbRow[]).map(rowToCategory)]);
         }
       } else {
-        setCategories((data as DbRow[]).map(rowToCategory));
+        setCategories(existing);
       }
       setIsLoaded(true);
     }

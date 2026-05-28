@@ -62,6 +62,7 @@ type ModalMode =
 export default function CategoriesPage() {
   const {
     categories,
+    isLoaded,
     addCategory,
     updateCategory,
     deleteCategory,
@@ -241,7 +242,11 @@ export default function CategoriesPage() {
         </div>
 
         {/* Category list */}
-        {categories.length === 0 ? (
+        {!isLoaded ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 flex items-center justify-center">
+            <p className="text-gray-400 text-sm">Loading categories…</p>
+          </div>
+        ) : categories.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 flex flex-col items-center gap-3 text-center">
             <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center text-3xl">
               📁
