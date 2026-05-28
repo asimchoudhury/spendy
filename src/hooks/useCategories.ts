@@ -55,22 +55,23 @@ export function useCategories() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadedForUser = useRef<string | null>(null);
+  const loadedForRefetchKey = useRef<number>(-1);
 
   useEffect(() => {
     let cancelled = false;
-    // Reset guard so refetchKey changes always trigger a fresh fetch
-    loadedForUser.current = null;
 
     async function run() {
       if (!user) {
         setCategories([]);
         setIsLoaded(false);
         loadedForUser.current = null;
+        loadedForRefetchKey.current = -1;
         return;
       }
 
-      if (loadedForUser.current === user.id) return;
+      if (loadedForUser.current === user.id && loadedForRefetchKey.current === refetchKey) return;
       loadedForUser.current = user.id;
+      loadedForRefetchKey.current = refetchKey;
 
       const { data, error: fetchError } = await supabase
         .from("categories")
