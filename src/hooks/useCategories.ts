@@ -121,6 +121,8 @@ export function useCategories() {
 
     return () => {
       cancelled = true;
+      loadedForUser.current = null;
+      loadedForRefetchKey.current = -1;
     };
   }, [user, refetchKey]);
 
