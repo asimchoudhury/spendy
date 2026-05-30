@@ -44,7 +44,7 @@ The `main` branch must remain untouched and fully working at all times.
 git checkout -b feature/database-auth-migration
 ```
 
-<!-- Merge into `main` only after Phase 6 is complete and fully tested. -->
+Merge into `main` only after Phase 6 is complete and fully tested.
 
 ---
 
