@@ -118,16 +118,20 @@ export function useCategories() {
             )
           );
           seedPromise = (async (): Promise<CategoryData[]> => {
-            try {
-              const { data: inserted, error: insertError } = await supabase
-                .from("categories")
-                .insert(rows)
-                .select();
-              if (insertError) throw new Error(insertError.message);
-              return (inserted as DbRow[]).map(rowToCategory);
-            } finally {
+            const { data: inserted, error: insertError } = await supabase
+              .from("categories")
+              .upsert(rows, { onConflict: "user_id,name", ignoreDuplicates: true })
+              .select();
+            if (insertError) {
+              // Remove on error so the next run can retry
               activeSeedByUser.delete(capturedUserId);
+              throw new Error(insertError.message);
             }
+            // Intentionally keep the resolved promise in the map on success.
+            // Any concurrent run that fetched a stale (0-row) DB state while
+            // this insert was in flight will find this promise and reuse its
+            // result instead of firing a second INSERT.
+            return (inserted as DbRow[]).map(rowToCategory);
           })();
           activeSeedByUser.set(user.id, seedPromise);
         }
