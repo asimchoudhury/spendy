@@ -7,6 +7,11 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { useDataRefresh } from "@/contexts/DataRefreshContext";
 
+// Shared across all hook instances in the same browser session.
+// Ensures only one INSERT fires even if auth re-emits and the effect re-runs
+// while a seed is still in flight.
+const activeSeedByUser = new Map<string, Promise<CategoryData[]>>();
+
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -92,25 +97,58 @@ export function useCategories() {
       const missing = DEFAULT_CATEGORIES.filter((c) => !existingNames.has(c.name));
 
       if (missing.length > 0) {
-        const seeded = missing.map((cat) => ({
-          ...cat,
-          id: generateId(),
-          subcategories: cat.subcategories.map((s) => ({ ...s, id: generateId() })),
-        }));
-        const rows = seeded.map((cat) => categoryToRow(cat, user.id));
-        const { data: inserted, error: insertError } = await supabase
-          .from("categories")
-          .insert(rows)
-          .select();
+        // Reuse an in-flight seed promise if one already exists for this user.
+        // This prevents duplicate INSERTs when auth re-emits and the effect
+        // re-runs while a seed is still in progress.
+        const existingSeed = activeSeedByUser.get(user.id);
+        let seedPromise: Promise<CategoryData[]>;
+
+        if (existingSeed) {
+          seedPromise = existingSeed;
+        } else {
+          const capturedUserId = user.id;
+          const rows = missing.map((cat) =>
+            categoryToRow(
+              {
+                ...cat,
+                id: generateId(),
+                subcategories: cat.subcategories.map((s) => ({ ...s, id: generateId() })),
+              },
+              capturedUserId
+            )
+          );
+          seedPromise = (async (): Promise<CategoryData[]> => {
+            try {
+              const { data: inserted, error: insertError } = await supabase
+                .from("categories")
+                .insert(rows)
+                .select();
+              if (insertError) throw new Error(insertError.message);
+              return (inserted as DbRow[]).map(rowToCategory);
+            } finally {
+              activeSeedByUser.delete(capturedUserId);
+            }
+          })();
+          activeSeedByUser.set(user.id, seedPromise);
+        }
+
+        let seededCats: CategoryData[];
+        try {
+          seededCats = await seedPromise;
+        } catch (e: unknown) {
+          if (cancelled) return;
+          setError(e instanceof Error ? e.message : "Failed to seed categories");
+          setCategories(existing);
+          setIsLoaded(true);
+          return;
+        }
 
         if (cancelled) return;
-
-        if (insertError) {
-          setError(insertError.message);
-          setCategories(existing);
-        } else {
-          setCategories([...existing, ...(inserted as DbRow[]).map(rowToCategory)]);
-        }
+        // existing may have been fetched before the insert completed, so
+        // deduplicate by name when merging.
+        const seenNames = new Set(existing.map((c) => c.name));
+        const newOnly = seededCats.filter((c) => !seenNames.has(c.name));
+        setCategories([...existing, ...newOnly]);
       } else {
         setCategories(existing);
       }
