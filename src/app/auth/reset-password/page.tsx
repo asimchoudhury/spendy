@@ -18,14 +18,25 @@ const _initialHash = typeof window !== "undefined" ? window.location.hash : "";
 
 type Stage = "loading" | "form" | "success" | "error";
 
+function computeInitialState(): { stage: Stage; initError: string | null } {
+  if (typeof window === "undefined") return { stage: "loading", initError: null };
+  const code = new URLSearchParams(window.location.search).get("code");
+  if (code) return { stage: "loading", initError: null };
+  const hashParams = new URLSearchParams(_initialHash.slice(1));
+  if (hashParams.get("type") !== "recovery" || !hashParams.get("access_token")) {
+    return { stage: "error", initError: "Invalid or missing reset link. Please request a new one." };
+  }
+  return { stage: "loading", initError: null };
+}
+
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const [stage, setStage] = useState<Stage>("loading");
+  const [stage, setStage] = useState<Stage>(() => computeInitialState().stage);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [initError, setInitError] = useState<string | null>(null);
+  const [initError, setInitError] = useState<string | null>(() => computeInitialState().initError);
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("code");
@@ -43,11 +54,9 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    // Implicit flow: use the hash captured at module load (before Supabase cleared it)
+    // Implicit flow: invalid hash was already handled in useState initializer
     const hashParams = new URLSearchParams(_initialHash.slice(1));
     if (hashParams.get("type") !== "recovery" || !hashParams.get("access_token")) {
-      setInitError("Invalid or missing reset link. Please request a new one.");
-      setStage("error");
       return;
     }
 
