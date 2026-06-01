@@ -9,10 +9,9 @@ import { TIME_RANGE_OPTIONS, TimeRange, filterByRange } from "@/utils/dateRange"
 import {
   TrendingUp,
   TrendingDown,
-  DollarSign,
+  IndianRupee,
   Calendar,
   Tag,
-  Receipt,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -114,27 +113,27 @@ export function SummaryCards({ expenses, categories }: SummaryCardsProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {/* Card 1: Total Spent */}
-      <div className="bg-gradient-to-br from-violet-500 to-indigo-600 rounded-2xl p-5 text-white shadow-sm">
+      <div className="bg-gradient-to-br from-violet-500 to-indigo-600 rounded-2xl p-5 text-white shadow-sm min-w-0">
         <div className="flex items-start justify-between mb-3">
           <p className="text-xs font-medium text-white/80 uppercase tracking-wider">Total Spent</p>
           <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
-            <DollarSign size={16} className="text-white" />
+            <IndianRupee size={16} className="text-white" />
           </div>
         </div>
-        <p className="text-2xl font-bold text-white mb-0">{formatCurrency(filteredTotal)}</p>
+        <p className="text-lg sm:text-2xl font-bold text-white mb-0 tabular-nums">{formatCurrency(filteredTotal)}</p>
         <TimeRangeToggle value={totalRange} onChange={setTotalRange} />
         <p className="text-xs text-white/70 mt-1.5">{getRangeLabel(totalRange)}</p>
       </div>
 
       {/* Card 2: This Month (unchanged) */}
-      <div className="bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl p-5 text-white shadow-sm">
+      <div className="bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl p-5 text-white shadow-sm min-w-0">
         <div className="flex items-start justify-between mb-3">
           <p className="text-xs font-medium text-white/80 uppercase tracking-wider">This Month</p>
           <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
             <Calendar size={16} className="text-white" />
           </div>
         </div>
-        <p className="text-2xl font-bold text-white mb-1">{formatCurrency(monthly)}</p>
+        <p className="text-lg sm:text-2xl font-bold text-white mb-1 tabular-nums">{formatCurrency(monthly)}</p>
         <p className="text-xs text-white/70">
           {monthPct !== null ? (
             <span className="flex items-center gap-1">
@@ -159,7 +158,7 @@ export function SummaryCards({ expenses, categories }: SummaryCardsProps) {
             <Tag size={16} className="text-white" />
           </div>
         </div>
-        <p className="text-2xl font-bold text-white mb-0 truncate">
+        <p className="text-lg sm:text-2xl font-bold text-white mb-0 truncate">
           {topCategory ? `${topCatConfig?.icon} ${topCategory}` : "—"}
         </p>
         <TimeRangeToggle value={topCatRange} onChange={setTopCatRange} />
@@ -173,10 +172,10 @@ export function SummaryCards({ expenses, categories }: SummaryCardsProps) {
         <div className="flex items-start justify-between mb-3">
           <p className="text-xs font-medium text-white/80 uppercase tracking-wider">Monthly Count</p>
           <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
-            <Receipt size={16} className="text-white" />
+            <IndianRupee size={16} className="text-white" />
           </div>
         </div>
-        <p className="text-2xl font-bold text-white mb-0">{selectedMonthCount}</p>
+        <p className="text-lg sm:text-2xl font-bold text-white mb-0 tabular-nums">{selectedMonthCount}</p>
         <div className="flex items-center gap-1 mt-2.5">
           <button
             onClick={goPrevMonth}

@@ -66,7 +66,7 @@ export function MonthlyDonutChart({ expenses, categories }: MonthlyDonutChartPro
     <div className="bg-white rounded-2xl border border-gray-100 p-5">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">Category Breakdown</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Monthly Breakdown</h3>
           <p className="text-xs text-gray-500 mt-0.5">
             {hasData ? formatCurrency(total) + " this month" : "No data"}
           </p>
