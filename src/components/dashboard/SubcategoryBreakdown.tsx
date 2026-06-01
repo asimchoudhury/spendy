@@ -16,11 +16,14 @@ import { Modal } from "@/components/ui/Modal";
 import { formatCurrency } from "@/utils/currency";
 import { Expense, CategoryData } from "@/types/expense";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { TimeRange, TIME_RANGE_OPTIONS, filterByRange } from "@/utils/dateRange";
 
 interface SubcategoryBreakdownProps {
   category: CategoryData | null;
   expenses: Expense[];
   onClose: () => void;
+  /** When provided, the modal shows a month navigator starting at this month key (YYYY-MM). */
+  initialMonthKey?: string;
 }
 
 function toMonthKey(d: Date) {
@@ -44,44 +47,44 @@ export function SubcategoryBreakdown({
   category,
   expenses,
   onClose,
+  initialMonthKey,
 }: SubcategoryBreakdownProps) {
-  const now = new Date();
-  const [monthKey, setMonthKey] = useState(toMonthKey(now));
+  const isMonthMode = initialMonthKey !== undefined;
 
+  // Period mode state
+  const [range, setRange] = useState<TimeRange>("all");
+
+  // Month mode state
+  const [monthKey, setMonthKey] = useState(initialMonthKey ?? toMonthKey(new Date()));
+  const now = new Date();
   const isCurrentMonth = monthKey === toMonthKey(now);
 
-  const goBack = () => {
-    setMonthKey((m) => toMonthKey(subMonths(new Date(m + "-01"), 1)));
-  };
+  const goBack = () => setMonthKey((m) => toMonthKey(subMonths(new Date(m + "-01"), 1)));
   const goForward = () => {
     if (isCurrentMonth) return;
     setMonthKey((m) => toMonthKey(addMonths(new Date(m + "-01"), 1)));
   };
 
-  const { monthData, allTimeData, monthTotal, allTimeTotal } = useMemo(() => {
-    if (!category) return { monthData: [], allTimeData: [], monthTotal: 0, allTimeTotal: 0 };
+  const { chartData, chartTotal } = useMemo(() => {
+    if (!category) return { chartData: [], chartTotal: 0 };
 
     const catExpenses = expenses.filter((e) => e.category === category.name);
-    const monthExpenses = catExpenses.filter((e) => e.date.startsWith(monthKey));
+    const filtered = isMonthMode
+      ? catExpenses.filter((e) => e.date.startsWith(monthKey))
+      : filterByRange(catExpenses, range);
 
-    const toBreakdown = (exps: Expense[]) => {
-      const map: Record<string, number> = {};
-      exps.forEach((e) => {
-        const sub = e.subcategory || "General";
-        map[sub] = (map[sub] || 0) + e.amount;
-      });
-      return Object.entries(map)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value);
-    };
+    const map: Record<string, number> = {};
+    filtered.forEach((e) => {
+      const sub = e.subcategory || "General";
+      map[sub] = (map[sub] || 0) + e.amount;
+    });
 
-    const monthData = toBreakdown(monthExpenses);
-    const allTimeData = toBreakdown(catExpenses);
-    const monthTotal = monthData.reduce((s, d) => s + d.value, 0);
-    const allTimeTotal = allTimeData.reduce((s, d) => s + d.value, 0);
+    const chartData = Object.entries(map)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
 
-    return { monthData, allTimeData, monthTotal, allTimeTotal };
-  }, [category, expenses, monthKey]);
+    return { chartData, chartTotal: chartData.reduce((s, d) => s + d.value, 0) };
+  }, [category, expenses, range, monthKey, isMonthMode]);
 
   const displayMonth = format(new Date(monthKey + "-01"), "MMMM yyyy");
 
@@ -94,18 +97,9 @@ export function SubcategoryBreakdown({
       title={`${category.icon} ${category.name} — Subcategory Breakdown`}
     >
       <div className="flex flex-col gap-5">
-        {/* All-time summary */}
-        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-          <span className="text-sm text-gray-600">All-time total</span>
-          <span className="text-sm font-semibold text-gray-900">
-            {formatCurrency(allTimeTotal)}
-          </span>
-        </div>
-
-        {/* Month picker */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-medium text-gray-700">Monthly View</h4>
+        {/* Selector row: month navigator OR period tabs */}
+        <div className="flex items-center justify-between gap-2">
+          {isMonthMode ? (
             <div className="flex items-center gap-1">
               <button
                 onClick={goBack}
@@ -124,67 +118,80 @@ export function SubcategoryBreakdown({
                 <ChevronRight size={15} />
               </button>
             </div>
-          </div>
-
-          {monthData.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-sm text-gray-400 bg-gray-50 rounded-xl">
-              No expenses in {displayMonth}
-            </div>
           ) : (
-            <>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-500">
-                  {monthData.length} subcategor{monthData.length !== 1 ? "ies" : "y"}
-                </span>
-                <span className="text-xs font-semibold text-gray-700">
-                  {formatCurrency(monthTotal)} total
-                </span>
-              </div>
-              <ResponsiveContainer width="100%" height={150}>
-                <BarChart
-                  data={monthData}
-                  margin={{ top: 5, right: 5, left: -25, bottom: 5 }}
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+              {TIME_RANGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setRange(opt.value)}
+                  className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all whitespace-nowrap ${
+                    range === opt.value
+                      ? "bg-white text-violet-700 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 11, fill: "#9ca3af" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: "#9ca3af" }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `₹${v}`}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {monthData.map((_, i) => (
-                      <Cell key={i} fill={category.color} fillOpacity={0.8 - i * 0.1} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           )}
+          <span className="text-sm font-semibold text-gray-900">
+            {formatCurrency(chartTotal)}
+          </span>
         </div>
 
-        {/* Monthly table */}
-        {monthData.length > 0 && (
+        {/* Bar chart or empty state */}
+        {chartData.length === 0 ? (
+          <div className="h-32 flex items-center justify-center text-sm text-gray-400 bg-gray-50 rounded-xl">
+            {isMonthMode ? `No expenses in ${displayMonth}` : "No expenses in this period"}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={150}>
+            <BarChart
+              data={chartData}
+              margin={{ top: 5, right: 5, left: -25, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `₹${v}`}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {chartData.map((_, i) => (
+                  <Cell key={i} fill={category.color} fillOpacity={0.8 - i * 0.1} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+
+        {/* Breakdown table */}
+        {chartData.length > 0 && (
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
               Breakdown
             </p>
-            {monthData.map((row, i) => {
-              const pct = monthTotal > 0 ? (row.value / monthTotal) * 100 : 0;
+            {chartData.map((row, i) => {
+              const pct = chartTotal > 0 ? (row.value / chartTotal) * 100 : 0;
               return (
                 <div key={i} className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-700">{row.name}</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {formatCurrency(row.value)}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-400">{pct.toFixed(1)}%</span>
+                      <span className="text-sm font-medium text-gray-900">
+                        {formatCurrency(row.value)}
+                      </span>
+                    </div>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-1.5">
                     <div
@@ -195,51 +202,6 @@ export function SubcategoryBreakdown({
                 </div>
               );
             })}
-          </div>
-        )}
-
-        {/* All-time table */}
-        {allTimeData.length > 0 && (
-          <div className="flex flex-col gap-1">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-              All-time by subcategory
-            </p>
-            <div className="bg-gray-50 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">
-                      Subcategory
-                    </th>
-                    <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">
-                      Total
-                    </th>
-                    <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">
-                      %
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allTimeData.map((row, i) => {
-                    const pct = allTimeTotal > 0 ? (row.value / allTimeTotal) * 100 : 0;
-                    return (
-                      <tr
-                        key={i}
-                        className="border-b border-gray-100 last:border-0"
-                      >
-                        <td className="px-3 py-2 text-gray-700">{row.name}</td>
-                        <td className="px-3 py-2 text-right font-medium text-gray-900">
-                          {formatCurrency(row.value)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-400">
-                          {pct.toFixed(1)}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           </div>
         )}
       </div>
