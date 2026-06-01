@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Receipt, Menu, X, Wallet, Tags, LogOut } from "lucide-react";
+import { LayoutDashboard, IndianRupee, Menu, X, Wallet, Tags, LogOut } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
@@ -15,7 +15,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", lucideIcon: LayoutDashboard },
-  { href: "/expenses", label: "Expenses", lucideIcon: Receipt },
+  { href: "/expenses", label: "Expenses", lucideIcon: IndianRupee },
   { href: "/breakdown", label: "Breakdown", emoji: "📊" },
   { href: "/categories", label: "Categories", lucideIcon: Tags },
 ];

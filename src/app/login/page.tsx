@@ -67,14 +67,9 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <Link href="/forgot-password" className="text-xs text-violet-600 hover:text-violet-700">
-                Forgot password?
-              </Link>
-            </div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
             <input
               id="password"
               type="password"
@@ -85,6 +80,11 @@ export default function LoginPage() {
               placeholder="••••••••"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
             />
+            <div className="flex justify-end mt-1.5">
+              <Link href="/forgot-password" className="text-xs text-violet-600 hover:text-violet-700">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           {error && (
