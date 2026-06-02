@@ -292,22 +292,23 @@ export function useExpenses() {
   );
 
   const bulkMigrateSubcategory = useCallback(
-    (category: string, fromSubcategory: string, toSubcategory: string) => {
+    async (category: string, fromSubcategory: string, toSubcategory: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
       const now = new Date().toISOString();
-      setExpenses((prev) =>
-        prev.map((e) =>
-          e.category === category && e.subcategory === fromSubcategory
-            ? { ...e, subcategory: toSubcategory, updatedAt: now }
-            : e
-        )
-      );
-      supabase
+      const { error: e } = await supabase
         .from("expenses")
         .update({ subcategory: toSubcategory, updated_at: now })
-        .eq("user_id", user!.id)
+        .eq("user_id", user.id)
         .eq("category", category)
-        .eq("subcategory", fromSubcategory)
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .eq("subcategory", fromSubcategory);
+      if (e) throw new Error(e.message);
+      setExpenses((prev) =>
+        prev.map((exp) =>
+          exp.category === category && exp.subcategory === fromSubcategory
+            ? { ...exp, subcategory: toSubcategory, updatedAt: now }
+            : exp
+        )
+      );
     },
     [user]
   );
@@ -328,6 +329,24 @@ export function useExpenses() {
         .eq("user_id", user!.id)
         .eq("category", oldName)
         .then(({ error: e }) => { if (e) setError(e.message); });
+    },
+    [user]
+  );
+
+  // Atomically deletes the category row AND all of its expenses in a single
+  // transaction via the `delete_category_cascade` Postgres function (see
+  // supabase/migrations/0001_delete_category_cascade.sql). Because both tables are
+  // deleted server-side in one transaction, there is no partial-failure window.
+  // On success we update both local states: expenses here, the category row via
+  // useCategories.removeCategoryFromState (called by the page).
+  const deleteCategoryWithExpenses = useCallback(
+    async (categoryName: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
+      const { error: e } = await supabase.rpc("delete_category_cascade", {
+        cat_name: categoryName,
+      });
+      if (e) throw new Error(e.message);
+      setExpenses((prev) => prev.filter((exp) => exp.category !== categoryName));
     },
     [user]
   );
@@ -436,6 +455,7 @@ export function useExpenses() {
     bulkMigrateSubcategory,
     bulkRenameCategory,
     bulkRenameSubcategory,
+    deleteCategoryWithExpenses,
     seedSampleData,
     isLoaded,
     error,

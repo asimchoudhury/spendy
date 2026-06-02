@@ -8,6 +8,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency } from "@/utils/currency";
 import { Expense } from "@/types/expense";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { toMonthKey } from "@/utils/dateRange";
 
 type ViewMode = "monthly" | "period";
 type PeriodRange = "3m" | "6m" | "1y";
@@ -18,9 +19,6 @@ const SUBCAT_COLORS = [
   "#84cc16", "#f97316",
 ];
 
-function toMonthKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 function getPeriodStart(range: PeriodRange): Date {
   const now = new Date();

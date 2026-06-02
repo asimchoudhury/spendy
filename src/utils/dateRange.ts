@@ -1,5 +1,9 @@
 import { format, subMonths, subYears } from "date-fns";
 
+export function toMonthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export type TimeRange = "all" | "1y" | "6m" | "3m";
 
 export const TIME_RANGE_OPTIONS: { label: string; value: TimeRange }[] = [

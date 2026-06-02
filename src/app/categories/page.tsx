@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useCategories } from "@/hooks/useCategories";
 import { useExpenses } from "@/hooks/useExpenses";
 import { CategoryData, Subcategory } from "@/types/expense";
@@ -10,7 +10,6 @@ import {
   validateCategoryName,
   validateSubcategoryName,
   suggestIconForCategory,
-  DEFAULT_CATEGORIES,
 } from "@/utils/categories";
 import { IconPicker } from "@/components/ui/IconPicker";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
@@ -63,18 +62,36 @@ export default function CategoriesPage() {
   const {
     categories,
     isLoaded,
+    error: categoriesError,
     addCategory,
     updateCategory,
-    deleteCategory,
+    removeCategoryFromState,
     addSubcategory,
     updateSubcategory,
     deleteSubcategory,
   } = useCategories();
-  const { bulkMigrateCategory, bulkMigrateSubcategory, bulkRenameCategory, bulkRenameSubcategory } =
+  const { expenses, isLoaded: expensesLoaded, error: expensesError, bulkMigrateSubcategory, bulkRenameCategory, bulkRenameSubcategory, deleteCategoryWithExpenses } =
     useExpenses();
+
+  const expenseCountByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    expenses.forEach((e) => { map[e.category] = (map[e.category] || 0) + 1; });
+    return map;
+  }, [expenses]);
+
+  const expenseCountBySubcategory = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    expenses.forEach((e) => {
+      if (!map[e.category]) map[e.category] = {};
+      const sub = e.subcategory || "General";
+      map[e.category][sub] = (map[e.category][sub] || 0) + 1;
+    });
+    return map;
+  }, [expenses]);
   const { toasts, addToast, dismiss } = useToast();
 
   const [modal, setModal] = useState<ModalMode | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [nameInput, setNameInput] = useState("");
   const [nameError, setNameError] = useState("");
@@ -182,23 +199,39 @@ export default function CategoriesPage() {
     }
   };
 
-  const handleDeleteCategory = () => {
-    if (modal?.type !== "delete-category") return;
+  const handleDeleteCategory = async () => {
+    if (modal?.type !== "delete-category" || isDeleting) return;
     const cat = modal.category;
-    const fallback = categories.find((c) => c.id !== cat.id) ?? DEFAULT_CATEGORIES[5];
-    bulkMigrateCategory(cat.name, fallback.name, "General");
-    deleteCategory(cat.id);
-    addToast("success", `Category "${cat.name}" deleted. Expenses moved to "${fallback.name}".`);
-    closeModal();
+    setIsDeleting(true);
+    try {
+      // Single atomic transaction deletes the category row + all its expenses
+      // server-side (delete_category_cascade RPC). Local state is then synced:
+      // expenses inside deleteCategoryWithExpenses, the category row here.
+      await deleteCategoryWithExpenses(cat.name);
+      removeCategoryFromState(cat.id);
+      addToast("success", `"${cat.name}" and all its expenses have been deleted.`);
+      closeModal();
+    } catch (err) {
+      addToast("error", err instanceof Error ? err.message : "Failed to delete category");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
-  const handleDeleteSubcategory = () => {
-    if (modal?.type !== "delete-subcategory") return;
+  const handleDeleteSubcategory = async () => {
+    if (modal?.type !== "delete-subcategory" || isDeleting) return;
     const { category, subcategory } = modal;
-    bulkMigrateSubcategory(category.name, subcategory.name, "General");
-    deleteSubcategory(category.id, subcategory.id);
-    addToast("success", `Subcategory "${subcategory.name}" deleted. Expenses moved to "General".`);
-    closeModal();
+    setIsDeleting(true);
+    try {
+      await bulkMigrateSubcategory(category.name, subcategory.name, "General");
+      await deleteSubcategory(category.id, subcategory.id);
+      addToast("success", `"${subcategory.name}" deleted. Expenses moved to "General".`);
+      closeModal();
+    } catch (err) {
+      addToast("error", err instanceof Error ? err.message : "Failed to delete subcategory");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // ── Modal title and content ────────────────────────────────────────
@@ -223,6 +256,12 @@ export default function CategoriesPage() {
 
   return (
     <>
+      {(categoriesError || expensesError) && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+          {categoriesError || expensesError}
+        </div>
+      )}
+
       <div className="flex flex-col gap-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -328,8 +367,13 @@ export default function CategoriesPage() {
                                   subcategory: sub,
                                 })
                               }
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
-                              title="Rename subcategory"
+                              disabled={sub.name === "General"}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-gray-400 disabled:hover:bg-transparent"
+                              title={
+                                sub.name === "General"
+                                  ? "The General subcategory cannot be renamed"
+                                  : "Rename subcategory"
+                              }
                             >
                               <Pencil size={13} />
                             </button>
@@ -341,10 +385,12 @@ export default function CategoriesPage() {
                                   subcategory: sub,
                                 })
                               }
-                              disabled={cat.subcategories.length <= 1}
+                              disabled={sub.name === "General" || cat.subcategories.length <= 1}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                               title={
-                                cat.subcategories.length <= 1
+                                sub.name === "General"
+                                  ? "The General subcategory cannot be deleted"
+                                  : cat.subcategories.length <= 1
                                   ? "Cannot delete the only subcategory"
                                   : "Delete subcategory"
                               }
@@ -426,38 +472,56 @@ export default function CategoriesPage() {
         onClose={closeModal}
         title="Delete Category"
       >
-        {modal?.type === "delete-category" && (
-          <div className="flex flex-col gap-5">
-            <div className="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
-                <AlertTriangle size={18} className="text-red-500" />
+        {modal?.type === "delete-category" && (() => {
+          const count = expensesLoaded ? (expenseCountByCategory[modal.category.name] ?? 0) : null;
+          const subCount = modal.category.subcategories.length;
+          return (
+            <div className="flex flex-col gap-5">
+              <div className="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
+                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                  <AlertTriangle size={18} className="text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    Delete &quot;{modal.category.name}&quot;?
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This will permanently delete the category along with{" "}
+                    <span className="font-semibold text-red-600">
+                      {subCount} subcategor{subCount !== 1 ? "ies" : "y"}
+                    </span>{" "}
+                    and{" "}
+                    <span className="font-semibold text-red-600">
+                      {count === null ? "…" : `${count} expense${count !== 1 ? "s" : ""}`}
+                    </span>
+                    . This cannot be undone.
+                  </p>
+                  {count === 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      No expenses are currently assigned to this category.
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  Delete &quot;{modal.category.name}&quot;?
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  All expenses in this category will be moved to another category.
-                  This cannot be undone.
-                </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={closeModal}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteCategory}
+                  disabled={isDeleting || count === null}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? "Deleting…" : "Delete Everything"}
+                </button>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={closeModal}
-                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteCategory}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Delete subcategory modal */}
@@ -466,38 +530,84 @@ export default function CategoriesPage() {
         onClose={closeModal}
         title="Delete Subcategory"
       >
-        {modal?.type === "delete-subcategory" && (
-          <div className="flex flex-col gap-5">
-            <div className="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
-                <AlertTriangle size={18} className="text-red-500" />
+        {modal?.type === "delete-subcategory" && (() => {
+          const { category, subcategory } = modal;
+          const isGeneral = subcategory.name === "General";
+          const count = expensesLoaded
+            ? (expenseCountBySubcategory[category.name]?.[subcategory.name] ?? 0)
+            : null;
+
+          if (isGeneral) {
+            return (
+              <div className="flex flex-col gap-5">
+                <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-xl">
+                  <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
+                    <AlertTriangle size={18} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      Cannot delete &quot;General&quot;
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      The &quot;General&quot; subcategory is required in every category. It acts
+                      as the default destination for expenses when other subcategories are deleted.
+                      To remove it, delete the entire &quot;{category.name}&quot; category instead.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={closeModal}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Got it
+                </button>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  Delete &quot;{modal.subcategory.name}&quot;?
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  All expenses in this subcategory will be moved to &quot;General&quot;
-                  within {modal.category.name}. This cannot be undone.
-                </p>
+            );
+          }
+
+          return (
+            <div className="flex flex-col gap-5">
+              <div className="flex items-start gap-3 p-4 bg-red-50 rounded-xl">
+                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                  <AlertTriangle size={18} className="text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    Delete &quot;{subcategory.name}&quot;?
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    <span className="font-semibold text-red-600">
+                      {count === null ? "…" : `${count} expense${count !== 1 ? "s" : ""}`}
+                    </span>{" "}
+                    will be moved to &quot;General&quot; under &quot;{category.name}&quot;.
+                    This cannot be undone.
+                  </p>
+                  {count === 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      No expenses are currently assigned to this subcategory.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={closeModal}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteSubcategory}
+                  disabled={isDeleting || count === null}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? "Deleting…" : "Delete & Move"}
+                </button>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={closeModal}
-                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteSubcategory}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
