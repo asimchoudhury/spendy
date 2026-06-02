@@ -6,6 +6,8 @@ import { DEFAULT_CATEGORIES, getNextColor, suggestIconForCategory } from "@/util
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { useDataRefresh } from "@/contexts/DataRefreshContext";
+import { isNetworkError } from "@/utils/offlineQueue";
+import { markOffline, markOnline } from "@/utils/connectivity";
 
 // Shared across all hook instances in the same browser session.
 // Ensures only one INSERT fires even if auth re-emits and the effect re-runs
@@ -87,11 +89,14 @@ export function useCategories() {
       if (cancelled) return;
 
       if (fetchError) {
+        if (isNetworkError(fetchError)) markOffline();
         setError(fetchError.message);
         setIsLoaded(true);
         return;
       }
 
+      markOnline();
+      setError(null);
       const existing = (data as DbRow[]).map(rowToCategory);
 
       // Seed the six built-in defaults ONLY for a brand-new user whose category
@@ -166,7 +171,8 @@ export function useCategories() {
   }, [user, refetchKey]);
 
   const addCategory = useCallback(
-    (name: string, icon?: string): CategoryData => {
+    async (name: string, icon?: string): Promise<CategoryData> => {
+      if (!user) throw new Error("Not authenticated");
       const palette = getNextColor(categories.length);
       const newCat: CategoryData = {
         id: generateId(),
@@ -175,20 +181,27 @@ export function useCategories() {
         icon: icon ?? suggestIconForCategory(name),
         subcategories: [{ id: generateId(), name: "General" }],
       };
-      setCategories((prev) => [...prev, newCat]);
-      supabase
+      const { error: e } = await supabase
         .from("categories")
-        .insert(categoryToRow(newCat, user!.id))
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
+        .insert(categoryToRow(newCat, user.id));
+      if (e) throw new Error(e.message);
+      setCategories((prev) => [...prev, newCat]);
       return newCat;
     },
     [categories.length, user]
   );
 
   const updateCategory = useCallback(
-    (id: string, name: string, icon?: string): void => {
+    async (id: string, name: string, icon?: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
+      const patch: Record<string, string> = { name: name.trim() };
+      if (icon !== undefined) patch.icon = icon;
+      const { error: e } = await supabase
+        .from("categories")
+        .update(patch)
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
       setCategories((prev) =>
         prev.map((c) =>
           c.id === id
@@ -196,16 +209,6 @@ export function useCategories() {
             : c
         )
       );
-      const patch: Record<string, string> = { name: name.trim() };
-      if (icon !== undefined) patch.icon = icon;
-      supabase
-        .from("categories")
-        .update(patch)
-        .eq("id", id)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
     },
     [user]
   );
@@ -233,53 +236,51 @@ export function useCategories() {
   }, []);
 
   const addSubcategory = useCallback(
-    (categoryId: string, name: string): Subcategory => {
+    async (categoryId: string, name: string): Promise<Subcategory> => {
+      if (!user) throw new Error("Not authenticated");
       const sub: Subcategory = { id: generateId(), name: name.trim() };
       const cat = categories.find((c) => c.id === categoryId);
       const updatedSubs = cat ? [...cat.subcategories, sub] : [sub];
+      const { error: e } = await supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
       setCategories((prev) =>
         prev.map((c) =>
           c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
-      supabase
-        .from("categories")
-        .update({ subcategories: updatedSubs })
-        .eq("id", categoryId)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
       return sub;
     },
     [categories, user]
   );
 
   const updateSubcategory = useCallback(
-    (categoryId: string, subcategoryId: string, name: string): void => {
+    async (categoryId: string, subcategoryId: string, name: string): Promise<void> => {
       const cat = categories.find((c) => c.id === categoryId);
       const sub = cat?.subcategories.find((s) => s.id === subcategoryId);
       // Guard: never rename the "General" subcategory — it is a protected default
       // that other features (subcategory deletion, expense fallback) rely on.
       if (sub?.name === "General") return;
+      if (!user) throw new Error("Not authenticated");
       const updatedSubs = cat
         ? cat.subcategories.map((s) =>
             s.id === subcategoryId ? { ...s, name: name.trim() } : s
           )
         : [];
+      const { error: e } = await supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
       setCategories((prev) =>
         prev.map((c) =>
           c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
-      supabase
-        .from("categories")
-        .update({ subcategories: updatedSubs })
-        .eq("id", categoryId)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
     },
     [categories, user]
   );

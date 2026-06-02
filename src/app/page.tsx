@@ -14,11 +14,13 @@ import { Modal } from "@/components/ui/Modal";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { exportJSON } from "@/utils/exportFormats";
+import { useOffline } from "@/utils/connectivity";
 import { Plus, Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
   const { expenses, addExpense, seedSampleData, isLoaded } = useExpenses();
   const { categories } = useCategories();
+  const offline = useOffline();
   const [showForm, setShowForm] = useState(false);
   const { toasts, addToast, dismiss } = useToast();
   const router = useRouter();
@@ -47,12 +49,14 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               {isLoaded && expenses.length === 0
-                ? "Welcome! Add your first expense or load sample data."
+                ? offline
+                  ? "You're offline. You can still add expenses — they'll sync when you reconnect."
+                  : "Welcome! Add your first expense or load sample data."
                 : "Your financial overview"}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {isLoaded && expenses.length === 0 && (
+            {isLoaded && expenses.length === 0 && !offline && (
               <button
                 onClick={handleSeed}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 text-sm font-medium transition-colors"

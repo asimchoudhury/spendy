@@ -54,7 +54,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // Clear local auth state up front so logout works even offline. Otherwise
+    // supabase.auth.signOut()'s network call to revoke the session fails while
+    // offline and leaves `user` set, causing RouteGuard to bounce the user from
+    // /login straight back to the dashboard. The server-side revoke + storage
+    // cleanup still happen below when a connection is available.
+    setUser(null);
+    setSession(null);
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // offline / server unreachable — local state is already cleared
+    }
   };
 
   return (

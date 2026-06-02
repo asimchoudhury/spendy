@@ -12,6 +12,8 @@ import {
   suggestIconForCategory,
 } from "@/utils/categories";
 import { IconPicker } from "@/components/ui/IconPicker";
+import { friendlyError, isNetworkError } from "@/utils/offlineQueue";
+import { useOffline } from "@/utils/connectivity";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 
 // ─── Inline form component ────────────────────────────────────────────────────
@@ -89,9 +91,11 @@ export default function CategoriesPage() {
     return map;
   }, [expenses]);
   const { toasts, addToast, dismiss } = useToast();
+  const offline = useOffline();
 
   const [modal, setModal] = useState<ModalMode | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [nameInput, setNameInput] = useState("");
   const [nameError, setNameError] = useState("");
@@ -168,34 +172,40 @@ export default function CategoriesPage() {
 
   // ── Submit handlers ────────────────────────────────────────────────
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setTouched(true);
     const err = validateName(nameInput);
     setNameError(err);
-    if (err || !modal) return;
+    if (err || !modal || isSubmitting) return;
 
-    if (modal.type === "add-category") {
-      addCategory(nameInput, iconInput);
-      addToast("success", `Category "${nameInput.trim()}" added`);
+    // Category/subcategory writes are atomic (DB-first): they throw when the
+    // write fails (e.g. offline), so we only toast success + close on success.
+    setIsSubmitting(true);
+    try {
+      if (modal.type === "add-category") {
+        await addCategory(nameInput, iconInput);
+        addToast("success", `Category "${nameInput.trim()}" added`);
+      } else if (modal.type === "edit-category") {
+        const oldName = modal.category.name;
+        const newName = nameInput.trim();
+        await updateCategory(modal.category.id, newName, iconInput);
+        await bulkRenameCategory(oldName, newName);
+        addToast("success", `Category renamed to "${newName}"`);
+      } else if (modal.type === "add-subcategory") {
+        await addSubcategory(modal.category.id, nameInput);
+        addToast("success", `Subcategory "${nameInput.trim()}" added`);
+      } else if (modal.type === "edit-subcategory") {
+        const oldName = modal.subcategory.name;
+        const newName = nameInput.trim();
+        await updateSubcategory(modal.category.id, modal.subcategory.id, newName);
+        await bulkRenameSubcategory(modal.category.name, oldName, newName);
+        addToast("success", `Subcategory renamed to "${newName}"`);
+      }
       closeModal();
-    } else if (modal.type === "edit-category") {
-      const oldName = modal.category.name;
-      const newName = nameInput.trim();
-      updateCategory(modal.category.id, newName, iconInput);
-      bulkRenameCategory(oldName, newName);
-      addToast("success", `Category renamed to "${newName}"`);
-      closeModal();
-    } else if (modal.type === "add-subcategory") {
-      addSubcategory(modal.category.id, nameInput);
-      addToast("success", `Subcategory "${nameInput.trim()}" added`);
-      closeModal();
-    } else if (modal.type === "edit-subcategory") {
-      const oldName = modal.subcategory.name;
-      const newName = nameInput.trim();
-      updateSubcategory(modal.category.id, modal.subcategory.id, newName);
-      bulkRenameSubcategory(modal.category.name, oldName, newName);
-      addToast("success", `Subcategory renamed to "${newName}"`);
-      closeModal();
+    } catch (e) {
+      addToast("error", friendlyError(e));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -212,7 +222,7 @@ export default function CategoriesPage() {
       addToast("success", `"${cat.name}" and all its expenses have been deleted.`);
       closeModal();
     } catch (err) {
-      addToast("error", err instanceof Error ? err.message : "Failed to delete category");
+      addToast("error", friendlyError(err));
     } finally {
       setIsDeleting(false);
     }
@@ -228,7 +238,7 @@ export default function CategoriesPage() {
       addToast("success", `"${subcategory.name}" deleted. Expenses moved to "General".`);
       closeModal();
     } catch (err) {
-      addToast("error", err instanceof Error ? err.message : "Failed to delete subcategory");
+      addToast("error", friendlyError(err));
     } finally {
       setIsDeleting(false);
     }
@@ -256,11 +266,17 @@ export default function CategoriesPage() {
 
   return (
     <>
-      {(categoriesError || expensesError) && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-          {categoriesError || expensesError}
-        </div>
-      )}
+      {/* Offline is communicated by the global banner; only surface genuine
+          (non-network) server errors inline so the two don't overlap. */}
+      {(() => {
+        const err = categoriesError || expensesError;
+        if (!err || isNetworkError(err)) return null;
+        return (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+            {err}
+          </div>
+        );
+      })()}
 
       <div className="flex flex-col gap-6">
         {/* Header */}
@@ -273,7 +289,9 @@ export default function CategoriesPage() {
           </div>
           <button
             onClick={() => openModal({ type: "add-category" })}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm"
+            disabled={offline}
+            title={offline ? "You can't add categories while offline" : "Add category"}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-violet-600"
           >
             <Plus size={16} />
             <span className="hidden sm:inline">Add Category</span>
@@ -456,9 +474,12 @@ export default function CategoriesPage() {
             </button>
             <button
               onClick={handleSubmit}
-              className="flex-1 px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {modal?.type === "add-category" || modal?.type === "add-subcategory"
+              {isSubmitting
+                ? "Saving…"
+                : modal?.type === "add-category" || modal?.type === "add-subcategory"
                 ? "Add"
                 : "Save"}
             </button>
