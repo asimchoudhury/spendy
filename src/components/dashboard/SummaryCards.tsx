@@ -116,7 +116,7 @@ export function SummaryCards({ expenses, categories }: SummaryCardsProps) {
       <div className="bg-gradient-to-br from-violet-500 to-indigo-600 rounded-2xl p-5 text-white shadow-sm min-w-0">
         <div className="flex items-start justify-between mb-3">
           <p className="text-xs font-medium text-white/80 uppercase tracking-wider">Total Spent</p>
-          <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
+          <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0 translate-x-2 sm:translate-x-0">
             <IndianRupee size={16} className="text-white" />
           </div>
         </div>
