@@ -7,6 +7,13 @@ import { generateSampleExpenses } from "@/utils/csv";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { useDataRefresh } from "@/contexts/DataRefreshContext";
+import {
+  DbExpenseRow,
+  rowToExpense,
+  expenseToRow,
+} from "@/utils/expenseMapping";
+import { enqueue, isNetworkError } from "@/utils/offlineQueue";
+import { markOffline, markOnline } from "@/utils/connectivity";
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -18,45 +25,6 @@ const DEFAULT_FILTERS: ExpenseFilters = {
   dateFrom: "",
   dateTo: "",
 };
-
-type DbExpenseRow = {
-  id: string;
-  user_id: string;
-  amount: string | number;
-  category: string;
-  subcategory: string | null;
-  description: string | null;
-  date: string;
-  created_at: string;
-  updated_at: string;
-};
-
-function rowToExpense(row: DbExpenseRow): Expense {
-  return {
-    id: row.id,
-    date: row.date,
-    amount: Number(row.amount),
-    category: row.category,
-    subcategory: row.subcategory ?? "General",
-    description: row.description ?? "",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-function expenseToRow(expense: Expense, userId: string) {
-  return {
-    id: expense.id,
-    user_id: userId,
-    amount: expense.amount,
-    category: expense.category,
-    subcategory: expense.subcategory,
-    description: expense.description,
-    date: expense.date,
-    created_at: expense.createdAt,
-    updated_at: expense.updatedAt,
-  };
-}
 
 export function useExpenses() {
   const { user } = useAuth();
@@ -98,11 +66,14 @@ export function useExpenses() {
       if (cancelled) return;
 
       if (fetchError) {
+        if (isNetworkError(fetchError)) markOffline();
         setError(fetchError.message);
         setIsLoaded(true);
         return;
       }
 
+      markOnline();
+      setError(null);
       setExpenses((data as DbExpenseRow[]).map(rowToExpense));
       setIsLoaded(true);
     }
@@ -154,10 +125,17 @@ export function useExpenses() {
         updatedAt: now,
       };
       setExpenses((prev) => [expense, ...prev]);
+      const row = expenseToRow(expense, user!.id);
       supabase
         .from("expenses")
-        .insert(expenseToRow(expense, user!.id))
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .insert(row)
+        .then(({ error: e }) => {
+          if (!e) return;
+          // Offline: persist the mutation so it survives a tab close and replays
+          // on reconnect. A real server error surfaces as usual.
+          if (isNetworkError(e)) { markOffline(); enqueue({ type: "add", row }); }
+          else setError(e.message);
+        });
       return expense;
     },
     [user]
@@ -181,19 +159,26 @@ export function useExpenses() {
             : e
         )
       );
+      const fields = {
+        date: data.date,
+        amount: parseFloat(data.amount),
+        category: data.category,
+        subcategory: data.subcategory || "General",
+        description: data.description.trim(),
+        updated_at: updatedAt,
+      };
       supabase
         .from("expenses")
-        .update({
-          date: data.date,
-          amount: parseFloat(data.amount),
-          category: data.category,
-          subcategory: data.subcategory || "General",
-          description: data.description.trim(),
-          updated_at: updatedAt,
-        })
+        .update(fields)
         .eq("id", id)
         .eq("user_id", user!.id)
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .then(({ error: e }) => {
+          if (!e) return;
+          if (isNetworkError(e)) {
+            markOffline();
+            enqueue({ type: "update", expenseId: id, userId: user!.id, fields });
+          } else setError(e.message);
+        });
     },
     [user]
   );
@@ -206,7 +191,13 @@ export function useExpenses() {
         .delete()
         .eq("id", id)
         .eq("user_id", user!.id)
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .then(({ error: e }) => {
+          if (!e) return;
+          if (isNetworkError(e)) {
+            markOffline();
+            enqueue({ type: "delete", expenseId: id, userId: user!.id });
+          } else setError(e.message);
+        });
     },
     [user]
   );
@@ -272,83 +263,105 @@ export function useExpenses() {
   );
 
   const bulkMigrateCategory = useCallback(
-    (fromCategory: string, toCategory: string, toSubcategory: string) => {
+    async (fromCategory: string, toCategory: string, toSubcategory: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
       const now = new Date().toISOString();
-      setExpenses((prev) =>
-        prev.map((e) =>
-          e.category === fromCategory
-            ? { ...e, category: toCategory, subcategory: toSubcategory, updatedAt: now }
-            : e
-        )
-      );
-      supabase
+      const { error: e } = await supabase
         .from("expenses")
         .update({ category: toCategory, subcategory: toSubcategory, updated_at: now })
-        .eq("user_id", user!.id)
-        .eq("category", fromCategory)
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .eq("user_id", user.id)
+        .eq("category", fromCategory);
+      if (e) throw new Error(e.message);
+      setExpenses((prev) =>
+        prev.map((exp) =>
+          exp.category === fromCategory
+            ? { ...exp, category: toCategory, subcategory: toSubcategory, updatedAt: now }
+            : exp
+        )
+      );
     },
     [user]
   );
 
   const bulkMigrateSubcategory = useCallback(
-    (category: string, fromSubcategory: string, toSubcategory: string) => {
+    async (category: string, fromSubcategory: string, toSubcategory: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
       const now = new Date().toISOString();
-      setExpenses((prev) =>
-        prev.map((e) =>
-          e.category === category && e.subcategory === fromSubcategory
-            ? { ...e, subcategory: toSubcategory, updatedAt: now }
-            : e
-        )
-      );
-      supabase
+      const { error: e } = await supabase
         .from("expenses")
         .update({ subcategory: toSubcategory, updated_at: now })
-        .eq("user_id", user!.id)
+        .eq("user_id", user.id)
         .eq("category", category)
-        .eq("subcategory", fromSubcategory)
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .eq("subcategory", fromSubcategory);
+      if (e) throw new Error(e.message);
+      setExpenses((prev) =>
+        prev.map((exp) =>
+          exp.category === category && exp.subcategory === fromSubcategory
+            ? { ...exp, subcategory: toSubcategory, updatedAt: now }
+            : exp
+        )
+      );
     },
     [user]
   );
 
   const bulkRenameCategory = useCallback(
-    (oldName: string, newName: string) => {
+    async (oldName: string, newName: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
       const now = new Date().toISOString();
-      setExpenses((prev) =>
-        prev.map((e) =>
-          e.category === oldName
-            ? { ...e, category: newName, updatedAt: now }
-            : e
-        )
-      );
-      supabase
+      const { error: e } = await supabase
         .from("expenses")
         .update({ category: newName, updated_at: now })
-        .eq("user_id", user!.id)
-        .eq("category", oldName)
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .eq("user_id", user.id)
+        .eq("category", oldName);
+      if (e) throw new Error(e.message);
+      setExpenses((prev) =>
+        prev.map((exp) =>
+          exp.category === oldName
+            ? { ...exp, category: newName, updatedAt: now }
+            : exp
+        )
+      );
+    },
+    [user]
+  );
+
+  // Atomically deletes the category row AND all of its expenses in a single
+  // transaction via the `delete_category_cascade` Postgres function (see
+  // supabase/migrations/0001_delete_category_cascade.sql). Because both tables are
+  // deleted server-side in one transaction, there is no partial-failure window.
+  // On success we update both local states: expenses here, the category row via
+  // useCategories.removeCategoryFromState (called by the page).
+  const deleteCategoryWithExpenses = useCallback(
+    async (categoryName: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
+      const { error: e } = await supabase.rpc("delete_category_cascade", {
+        cat_name: categoryName,
+      });
+      if (e) throw new Error(e.message);
+      setExpenses((prev) => prev.filter((exp) => exp.category !== categoryName));
     },
     [user]
   );
 
   const bulkRenameSubcategory = useCallback(
-    (category: string, oldName: string, newName: string) => {
+    async (category: string, oldName: string, newName: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
       const now = new Date().toISOString();
-      setExpenses((prev) =>
-        prev.map((e) =>
-          e.category === category && e.subcategory === oldName
-            ? { ...e, subcategory: newName, updatedAt: now }
-            : e
-        )
-      );
-      supabase
+      const { error: e } = await supabase
         .from("expenses")
         .update({ subcategory: newName, updated_at: now })
-        .eq("user_id", user!.id)
+        .eq("user_id", user.id)
         .eq("category", category)
-        .eq("subcategory", oldName)
-        .then(({ error: e }) => { if (e) setError(e.message); });
+        .eq("subcategory", oldName);
+      if (e) throw new Error(e.message);
+      setExpenses((prev) =>
+        prev.map((exp) =>
+          exp.category === category && exp.subcategory === oldName
+            ? { ...exp, subcategory: newName, updatedAt: now }
+            : exp
+        )
+      );
     },
     [user]
   );
@@ -436,6 +449,7 @@ export function useExpenses() {
     bulkMigrateSubcategory,
     bulkRenameCategory,
     bulkRenameSubcategory,
+    deleteCategoryWithExpenses,
     seedSampleData,
     isLoaded,
     error,

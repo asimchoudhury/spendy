@@ -7,6 +7,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { Navigation } from "@/components/layout/Navigation";
 import { MigrationModal } from "@/components/MigrationModal";
 import { DataRefreshProvider } from "@/contexts/DataRefreshContext";
+import { OfflineSyncManager } from "@/components/OfflineSyncManager";
+import { OfflineBanner } from "@/components/OfflineBanner";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth/callback", "/auth/reset-password"];
 // These public paths are part of an auth flow that may run while a session exists,
@@ -44,8 +46,12 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   return (
     <DataRefreshProvider>
       <Navigation />
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</main>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <OfflineBanner />
+        {children}
+      </main>
       <MigrationModal />
+      <OfflineSyncManager />
     </DataRefreshProvider>
   );
 }

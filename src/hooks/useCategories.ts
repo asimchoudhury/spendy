@@ -6,6 +6,8 @@ import { DEFAULT_CATEGORIES, getNextColor, suggestIconForCategory } from "@/util
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { useDataRefresh } from "@/contexts/DataRefreshContext";
+import { isNetworkError } from "@/utils/offlineQueue";
+import { markOffline, markOnline } from "@/utils/connectivity";
 
 // Shared across all hook instances in the same browser session.
 // Ensures only one INSERT fires even if auth re-emits and the effect re-runs
@@ -87,16 +89,21 @@ export function useCategories() {
       if (cancelled) return;
 
       if (fetchError) {
+        if (isNetworkError(fetchError)) markOffline();
         setError(fetchError.message);
         setIsLoaded(true);
         return;
       }
 
+      markOnline();
+      setError(null);
       const existing = (data as DbRow[]).map(rowToCategory);
-      const existingNames = new Set(existing.map((c) => c.name));
-      const missing = DEFAULT_CATEGORIES.filter((c) => !existingNames.has(c.name));
 
-      if (missing.length > 0) {
+      // Seed the six built-in defaults ONLY for a brand-new user whose category
+      // table is empty. We must NOT re-seed individual defaults that an existing
+      // user has intentionally deleted — otherwise deleting e.g. "Shopping" would
+      // silently resurrect it (as a fresh default, sans expenses) on the next fetch.
+      if (existing.length === 0) {
         // Reuse an in-flight seed promise if one already exists for this user.
         // This prevents duplicate INSERTs when auth re-emits and the effect
         // re-runs while a seed is still in progress.
@@ -107,7 +114,7 @@ export function useCategories() {
           seedPromise = existingSeed;
         } else {
           const capturedUserId = user.id;
-          const rows = missing.map((cat) =>
+          const rows = DEFAULT_CATEGORIES.map((cat) =>
             categoryToRow(
               {
                 ...cat,
@@ -127,10 +134,9 @@ export function useCategories() {
               activeSeedByUser.delete(capturedUserId);
               throw new Error(insertError.message);
             }
-            // Intentionally keep the resolved promise in the map on success.
-            // Any concurrent run that fetched a stale (0-row) DB state while
-            // this insert was in flight will find this promise and reuse its
-            // result instead of firing a second INSERT.
+            // Deduplication is only needed during the in-flight window; the seed
+            // never runs again once the table is non-empty, so drop the promise.
+            activeSeedByUser.delete(capturedUserId);
             return (inserted as DbRow[]).map(rowToCategory);
           })();
           activeSeedByUser.set(user.id, seedPromise);
@@ -142,17 +148,13 @@ export function useCategories() {
         } catch (e: unknown) {
           if (cancelled) return;
           setError(e instanceof Error ? e.message : "Failed to seed categories");
-          setCategories(existing);
+          setCategories([]);
           setIsLoaded(true);
           return;
         }
 
         if (cancelled) return;
-        // existing may have been fetched before the insert completed, so
-        // deduplicate by name when merging.
-        const seenNames = new Set(existing.map((c) => c.name));
-        const newOnly = seededCats.filter((c) => !seenNames.has(c.name));
-        setCategories([...existing, ...newOnly]);
+        setCategories(seededCats);
       } else {
         setCategories(existing);
       }
@@ -169,7 +171,8 @@ export function useCategories() {
   }, [user, refetchKey]);
 
   const addCategory = useCallback(
-    (name: string, icon?: string): CategoryData => {
+    async (name: string, icon?: string): Promise<CategoryData> => {
+      if (!user) throw new Error("Not authenticated");
       const palette = getNextColor(categories.length);
       const newCat: CategoryData = {
         id: generateId(),
@@ -178,20 +181,27 @@ export function useCategories() {
         icon: icon ?? suggestIconForCategory(name),
         subcategories: [{ id: generateId(), name: "General" }],
       };
-      setCategories((prev) => [...prev, newCat]);
-      supabase
+      const { error: e } = await supabase
         .from("categories")
-        .insert(categoryToRow(newCat, user!.id))
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
+        .insert(categoryToRow(newCat, user.id));
+      if (e) throw new Error(e.message);
+      setCategories((prev) => [...prev, newCat]);
       return newCat;
     },
     [categories.length, user]
   );
 
   const updateCategory = useCallback(
-    (id: string, name: string, icon?: string): void => {
+    async (id: string, name: string, icon?: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
+      const patch: Record<string, string> = { name: name.trim() };
+      if (icon !== undefined) patch.icon = icon;
+      const { error: e } = await supabase
+        .from("categories")
+        .update(patch)
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
       setCategories((prev) =>
         prev.map((c) =>
           c.id === id
@@ -199,102 +209,102 @@ export function useCategories() {
             : c
         )
       );
-      const patch: Record<string, string> = { name: name.trim() };
-      if (icon !== undefined) patch.icon = icon;
-      supabase
-        .from("categories")
-        .update(patch)
-        .eq("id", id)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
     },
     [user]
   );
 
   const deleteCategory = useCallback(
-    (id: string): void => {
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-      supabase
+    async (id: string): Promise<void> => {
+      if (!user) throw new Error("Not authenticated");
+      const { error: e } = await supabase
         .from("categories")
         .delete()
         .eq("id", id)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
+      setCategories((prev) => prev.filter((c) => c.id !== id));
     },
     [user]
   );
 
+  // Removes a category from local state only — no DB write. Used after the
+  // `delete_category_cascade` RPC (in useExpenses.deleteCategoryWithExpenses) has
+  // already deleted the row server-side, so issuing a second delete here would be a
+  // redundant round-trip that could spuriously fail after the real delete succeeded.
+  const removeCategoryFromState = useCallback((id: string): void => {
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
   const addSubcategory = useCallback(
-    (categoryId: string, name: string): Subcategory => {
+    async (categoryId: string, name: string): Promise<Subcategory> => {
+      if (!user) throw new Error("Not authenticated");
       const sub: Subcategory = { id: generateId(), name: name.trim() };
       const cat = categories.find((c) => c.id === categoryId);
       const updatedSubs = cat ? [...cat.subcategories, sub] : [sub];
+      const { error: e } = await supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
       setCategories((prev) =>
         prev.map((c) =>
           c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
-      supabase
-        .from("categories")
-        .update({ subcategories: updatedSubs })
-        .eq("id", categoryId)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
       return sub;
     },
     [categories, user]
   );
 
   const updateSubcategory = useCallback(
-    (categoryId: string, subcategoryId: string, name: string): void => {
+    async (categoryId: string, subcategoryId: string, name: string): Promise<void> => {
       const cat = categories.find((c) => c.id === categoryId);
+      const sub = cat?.subcategories.find((s) => s.id === subcategoryId);
+      // Guard: never rename the "General" subcategory — it is a protected default
+      // that other features (subcategory deletion, expense fallback) rely on.
+      if (sub?.name === "General") return;
+      if (!user) throw new Error("Not authenticated");
       const updatedSubs = cat
         ? cat.subcategories.map((s) =>
             s.id === subcategoryId ? { ...s, name: name.trim() } : s
           )
         : [];
+      const { error: e } = await supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
       setCategories((prev) =>
         prev.map((c) =>
           c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
-      supabase
-        .from("categories")
-        .update({ subcategories: updatedSubs })
-        .eq("id", categoryId)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
     },
     [categories, user]
   );
 
   const deleteSubcategory = useCallback(
-    (categoryId: string, subcategoryId: string): void => {
+    async (categoryId: string, subcategoryId: string): Promise<void> => {
       const cat = categories.find((c) => c.id === categoryId);
+      const sub = cat?.subcategories.find((s) => s.id === subcategoryId);
+      if (sub?.name === "General") return;
+      if (!user) throw new Error("Not authenticated");
       const updatedSubs = cat
         ? cat.subcategories.filter((s) => s.id !== subcategoryId)
         : [];
+      const { error: e } = await supabase
+        .from("categories")
+        .update({ subcategories: updatedSubs })
+        .eq("id", categoryId)
+        .eq("user_id", user.id);
+      if (e) throw new Error(e.message);
       setCategories((prev) =>
         prev.map((c) =>
           c.id === categoryId ? { ...c, subcategories: updatedSubs } : c
         )
       );
-      supabase
-        .from("categories")
-        .update({ subcategories: updatedSubs })
-        .eq("id", categoryId)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
     },
     [categories, user]
   );
@@ -339,6 +349,7 @@ export function useCategories() {
     addCategory,
     updateCategory,
     deleteCategory,
+    removeCategoryFromState,
     addSubcategory,
     updateSubcategory,
     deleteSubcategory,

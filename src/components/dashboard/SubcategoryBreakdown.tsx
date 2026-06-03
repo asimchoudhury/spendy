@@ -16,7 +16,7 @@ import { Modal } from "@/components/ui/Modal";
 import { formatCurrency } from "@/utils/currency";
 import { Expense, CategoryData } from "@/types/expense";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { TimeRange, TIME_RANGE_OPTIONS, filterByRange } from "@/utils/dateRange";
+import { TimeRange, TIME_RANGE_OPTIONS, filterByRange, toMonthKey } from "@/utils/dateRange";
 
 interface SubcategoryBreakdownProps {
   category: CategoryData | null;
@@ -24,10 +24,6 @@ interface SubcategoryBreakdownProps {
   onClose: () => void;
   /** When provided, the modal shows a month navigator starting at this month key (YYYY-MM). */
   initialMonthKey?: string;
-}
-
-function toMonthKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 interface TooltipEntry { value: number }

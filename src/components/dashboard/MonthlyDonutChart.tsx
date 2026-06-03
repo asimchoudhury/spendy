@@ -8,6 +8,7 @@ import { getCategoryConfig } from "@/utils/categories";
 import { Expense, CategoryData } from "@/types/expense";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SubcategoryBreakdown } from "./SubcategoryBreakdown";
+import { toMonthKey } from "@/utils/dateRange";
 
 interface MonthlyDonutChartProps {
   expenses: Expense[];
@@ -26,9 +27,6 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Toolti
   );
 }
 
-function toMonthKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 export function MonthlyDonutChart({ expenses, categories }: MonthlyDonutChartProps) {
   const now = new Date();

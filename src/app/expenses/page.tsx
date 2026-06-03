@@ -13,6 +13,7 @@ import { Expense, ExpenseFormData } from "@/types/expense";
 import { formatCurrency } from "@/utils/currency";
 import { ExportModal } from "@/components/export/ExportModal";
 import { exportJSON } from "@/utils/exportFormats";
+import { useOffline, probeOnline } from "@/utils/connectivity";
 import { Plus, Upload, Trash2, Download, FileJson } from "lucide-react";
 
 export default function ExpensesPage() {
@@ -36,6 +37,7 @@ export default function ExpensesPage() {
   const [showImport, setShowImport] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const { toasts, addToast, dismiss } = useToast();
+  const offline = useOffline();
 
   const handleAdd = (data: ExpenseFormData) => {
     addExpense(data);
@@ -64,6 +66,35 @@ export default function ExpensesPage() {
     exportJSON(expenses, `spendy-backup-${today}`);
   };
 
+  // Export/Import both need a live connection (export reflects server data;
+  // import writes to Supabase). Beyond the disabled-while-offline buttons, we do
+  // a live reachability probe at click time so an action taken in the brief
+  // window right after going offline (before navigator.onLine flips / the poll
+  // runs) is still reliably denied.
+  const ensureOnline = async (action: "export" | "import"): Promise<boolean> => {
+    const reachable =
+      offline || (typeof navigator !== "undefined" && navigator.onLine === false)
+        ? false
+        : await probeOnline();
+    if (!reachable) {
+      addToast(
+        "error",
+        action === "export"
+          ? "You're offline — export needs an internet connection."
+          : "You're offline — importing a backup needs an internet connection."
+      );
+    }
+    return reachable;
+  };
+
+  const handleOpenExport = async () => {
+    if (await ensureOnline("export")) setShowExport(true);
+  };
+
+  const handleOpenImport = async () => {
+    if (await ensureOnline("import")) setShowImport(true);
+  };
+
   const filteredTotal = filteredExpenses.reduce((s, e) => s + e.amount, 0);
 
   return (
@@ -80,16 +111,20 @@ export default function ExpensesPage() {
           </div>
           <div className="flex items-start gap-2">
             <button
-              onClick={() => setShowExport(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
+              onClick={handleOpenExport}
+              disabled={offline}
+              title={offline ? "Export is unavailable while you're offline" : "Export"}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             >
               <Upload size={15} />
               <span className="hidden sm:inline">Export</span>
             </button>
             <div className="flex flex-col items-end gap-1">
               <button
-                onClick={() => setShowImport(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-medium transition-colors"
+                onClick={handleOpenImport}
+                disabled={offline}
+                title={offline ? "Importing a backup needs an internet connection" : "Import JSON Backup"}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-50"
               >
                 <FileJson size={15} />
                 <span className="hidden sm:inline">Import JSON Backup</span>
@@ -151,8 +186,10 @@ export default function ExpensesPage() {
                 Add First Expense
               </button>
               <button
-                onClick={() => setShowImport(true)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-semibold transition-colors"
+                onClick={handleOpenImport}
+                disabled={offline}
+                title={offline ? "Importing a backup needs an internet connection" : "Import JSON Backup"}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-indigo-50"
               >
                 <Download size={16} />
                 Import JSON Backup

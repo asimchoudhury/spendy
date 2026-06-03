@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Loader2, Wallet } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/lib/supabase";
+import { isNetworkError } from "@/utils/offlineQueue";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -22,7 +23,11 @@ export default function LoginPage() {
     setLoading(true);
     const { error } = await signIn(email, password);
     if (error) {
-      setError(error);
+      setError(
+        isNetworkError(error)
+          ? "Can't sign in while you're offline — please check your connection."
+          : error
+      );
       setLoading(false);
     } else {
       router.push("/");
