@@ -9,6 +9,7 @@ import { formatCurrency } from "@/utils/currency";
 import { Expense } from "@/types/expense";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toMonthKey } from "@/utils/dateRange";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 
 type ViewMode = "monthly" | "period";
 type PeriodRange = "3m" | "6m" | "1y";
@@ -170,8 +171,8 @@ function buildCards(
 }
 
 export default function BreakdownPage() {
-  const { expenses, isLoaded } = useExpenses();
-  const { categories } = useCategories();
+  const { expenses, isLoaded, error: expensesError } = useExpenses();
+  const { categories, error: categoriesError } = useCategories();
   const [viewMode, setViewMode] = useState<ViewMode>("monthly");
   const [periodRange, setPeriodRange] = useState<PeriodRange>("3m");
 
@@ -209,6 +210,8 @@ export default function BreakdownPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <ErrorBanner error={expensesError || categoriesError} />
+
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Breakdown</h1>
         <p className="text-sm text-gray-500 mt-0.5">Subcategory breakdown by category</p>

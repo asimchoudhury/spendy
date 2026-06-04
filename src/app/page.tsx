@@ -13,13 +13,14 @@ import { RecentExpenses } from "@/components/dashboard/RecentExpenses";
 import { Modal } from "@/components/ui/Modal";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { exportJSON } from "@/utils/exportFormats";
 import { useOffline } from "@/utils/connectivity";
 import { Plus, Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
-  const { expenses, addExpense, seedSampleData, isLoaded } = useExpenses();
-  const { categories } = useCategories();
+  const { expenses, addExpense, seedSampleData, isLoaded, error: expensesError } = useExpenses();
+  const { categories, error: categoriesError } = useCategories();
   const offline = useOffline();
   const [showForm, setShowForm] = useState(false);
   const { toasts, addToast, dismiss } = useToast();
@@ -44,6 +45,8 @@ export default function DashboardPage() {
   return (
     <>
       <div className="flex flex-col gap-6">
+        <ErrorBanner error={expensesError || categoriesError} />
+
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>

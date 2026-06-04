@@ -112,12 +112,17 @@ export function useExpenses() {
   }, [user]);
 
   const addExpense = useCallback(
-    (data: ExpenseFormData): Expense => {
+    (data: ExpenseFormData): Expense | null => {
+      const amount = parseFloat(data.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setError("Invalid amount — expense was not saved.");
+        return null;
+      }
       const now = new Date().toISOString();
       const expense: Expense = {
         id: generateId(),
         date: data.date,
-        amount: parseFloat(data.amount),
+        amount,
         category: data.category,
         subcategory: data.subcategory || "General",
         description: data.description.trim(),
@@ -143,6 +148,11 @@ export function useExpenses() {
 
   const updateExpense = useCallback(
     (id: string, data: ExpenseFormData): void => {
+      const amount = parseFloat(data.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setError("Invalid amount — changes were not saved.");
+        return;
+      }
       const updatedAt = new Date().toISOString();
       setExpenses((prev) =>
         prev.map((e) =>
@@ -150,7 +160,7 @@ export function useExpenses() {
             ? {
                 ...e,
                 date: data.date,
-                amount: parseFloat(data.amount),
+                amount,
                 category: data.category,
                 subcategory: data.subcategory || "General",
                 description: data.description.trim(),
@@ -161,7 +171,7 @@ export function useExpenses() {
       );
       const fields = {
         date: data.date,
-        amount: parseFloat(data.amount),
+        amount,
         category: data.category,
         subcategory: data.subcategory || "General",
         description: data.description.trim(),
