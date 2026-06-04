@@ -6,7 +6,7 @@ import { DEFAULT_CATEGORIES, getNextColor, suggestIconForCategory } from "@/util
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { useDataRefresh } from "@/contexts/DataRefreshContext";
-import { isNetworkError } from "@/utils/offlineQueue";
+import { isNetworkError, commitWrite, OFFLINE_WRITE_MESSAGE } from "@/utils/offlineQueue";
 import { markOffline, markOnline } from "@/utils/connectivity";
 
 // Shared across all hook instances in the same browser session.
@@ -332,12 +332,16 @@ export function useCategories() {
       if (newCats.length === 0) return;
       setCategories((prev) => [...prev, ...newCats]);
       const rows = newCats.map((cat) => categoryToRow(cat, user!.id));
-      supabase
-        .from("categories")
-        .insert(rows)
-        .then(({ error: e }) => {
-          if (e) setError(e.message);
-        });
+      const addedIds = new Set(newCats.map((c) => c.id));
+      const rollback = () =>
+        setCategories((prev) => prev.filter((c) => !addedIds.has(c.id)));
+      // There is no offline queue for categories, so a failed import — network or
+      // server — rolls back the optimistic rows and surfaces the error rather than
+      // leaving local state diverged from the database.
+      commitWrite(() => supabase.from("categories").insert(rows), {
+        onNetworkError: () => { markOffline(); rollback(); setError(OFFLINE_WRITE_MESSAGE); },
+        onServerError: (msg) => { rollback(); setError(msg); },
+      });
     },
     [categories, user]
   );

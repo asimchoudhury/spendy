@@ -90,6 +90,39 @@ export function isNetworkError(err: unknown): boolean {
   );
 }
 
+// Runs an optimistic Supabase write and routes the outcome without ever throwing:
+//   • success                         → nothing
+//   • lost connectivity               → onNetworkError() (caller enqueues for replay)
+//   • genuine server rejection        → onServerError(message) (caller rolls back)
+// Both a resolved `{ error }` AND a rejected promise (e.g. a thrown
+// "Failed to fetch") are handled here, so a thrown fetch can't slip past the
+// caller's offline/rollback handling.
+export async function commitWrite(
+  write: () => PromiseLike<{ error: unknown }>,
+  handlers: { onNetworkError: () => void; onServerError: (message: string) => void }
+): Promise<void> {
+  try {
+    const { error } = await write();
+    if (error) throw error;
+  } catch (err) {
+    if (isNetworkError(err)) handlers.onNetworkError();
+    else handlers.onServerError(errorMessage(err));
+  }
+}
+
+// Pulls a human-readable message out of whatever a failed write threw/returned.
+// Supabase rejections are plain PostgrestError objects (a `message` field, not
+// an Error instance), so `String(err)` would yield "[object Object]" — handle
+// objects explicitly.
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return "Something went wrong. Please try again.";
+}
+
 // User-facing copy for a write that failed because the device is offline.
 export const OFFLINE_WRITE_MESSAGE =
   "You're offline — this change can't be saved yet. Reconnect to the internet and try again.";

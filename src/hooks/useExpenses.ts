@@ -12,7 +12,7 @@ import {
   rowToExpense,
   expenseToRow,
 } from "@/utils/expenseMapping";
-import { enqueue, isNetworkError } from "@/utils/offlineQueue";
+import { enqueue, isNetworkError, commitWrite, OFFLINE_WRITE_MESSAGE } from "@/utils/offlineQueue";
 import { markOffline, markOnline } from "@/utils/connectivity";
 
 function generateId(): string {
@@ -131,16 +131,16 @@ export function useExpenses() {
       };
       setExpenses((prev) => [expense, ...prev]);
       const row = expenseToRow(expense, user!.id);
-      supabase
-        .from("expenses")
-        .insert(row)
-        .then(({ error: e }) => {
-          if (!e) return;
-          // Offline: persist the mutation so it survives a tab close and replays
-          // on reconnect. A real server error surfaces as usual.
-          if (isNetworkError(e)) { markOffline(); enqueue({ type: "add", row }); }
-          else setError(e.message);
-        });
+      // Offline: persist the mutation so it survives a tab close and replays on
+      // reconnect. A real server error surfaces AND rolls back the optimistic row
+      // so local state can't diverge from the database.
+      commitWrite(() => supabase.from("expenses").insert(row), {
+        onNetworkError: () => { markOffline(); enqueue({ type: "add", row }); },
+        onServerError: (msg) => {
+          setError(msg);
+          setExpenses((prev) => prev.filter((e) => e.id !== expense.id));
+        },
+      });
       return expense;
     },
     [user]
@@ -154,20 +154,21 @@ export function useExpenses() {
         return;
       }
       const updatedAt = new Date().toISOString();
+      let prevExpense: Expense | undefined;
       setExpenses((prev) =>
-        prev.map((e) =>
-          e.id === id
-            ? {
-                ...e,
-                date: data.date,
-                amount,
-                category: data.category,
-                subcategory: data.subcategory || "General",
-                description: data.description.trim(),
-                updatedAt,
-              }
-            : e
-        )
+        prev.map((e) => {
+          if (e.id !== id) return e;
+          prevExpense = e;
+          return {
+            ...e,
+            date: data.date,
+            amount,
+            category: data.category,
+            subcategory: data.subcategory || "General",
+            description: data.description.trim(),
+            updatedAt,
+          };
+        })
       );
       const fields = {
         date: data.date,
@@ -177,37 +178,48 @@ export function useExpenses() {
         description: data.description.trim(),
         updated_at: updatedAt,
       };
-      supabase
-        .from("expenses")
-        .update(fields)
-        .eq("id", id)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (!e) return;
-          if (isNetworkError(e)) {
+      commitWrite(
+        () => supabase.from("expenses").update(fields).eq("id", id).eq("user_id", user!.id),
+        {
+          onNetworkError: () => {
             markOffline();
             enqueue({ type: "update", expenseId: id, userId: user!.id, fields });
-          } else setError(e.message);
-        });
+          },
+          onServerError: (msg) => {
+            setError(msg);
+            if (prevExpense) {
+              setExpenses((prev) => prev.map((e) => (e.id === id ? prevExpense! : e)));
+            }
+          },
+        }
+      );
     },
     [user]
   );
 
   const deleteExpense = useCallback(
     (id: string) => {
-      setExpenses((prev) => prev.filter((e) => e.id !== id));
-      supabase
-        .from("expenses")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user!.id)
-        .then(({ error: e }) => {
-          if (!e) return;
-          if (isNetworkError(e)) {
+      let removed: Expense | undefined;
+      setExpenses((prev) => {
+        removed = prev.find((e) => e.id === id);
+        return prev.filter((e) => e.id !== id);
+      });
+      commitWrite(
+        () => supabase.from("expenses").delete().eq("id", id).eq("user_id", user!.id),
+        {
+          onNetworkError: () => {
             markOffline();
             enqueue({ type: "delete", expenseId: id, userId: user!.id });
-          } else setError(e.message);
-        });
+          },
+          onServerError: (msg) => {
+            setError(msg);
+            // Restore the row only if it isn't already back (e.g. via refetch).
+            if (removed) {
+              setExpenses((prev) => (prev.some((e) => e.id === id) ? prev : [removed!, ...prev]));
+            }
+          },
+        }
+      );
     },
     [user]
   );
@@ -231,10 +243,17 @@ export function useExpenses() {
       if (toAdd.length > 0) {
         setExpenses((prev) => [...prev, ...toAdd]);
         const rows = toAdd.map((e) => expenseToRow(e, user!.id));
-        supabase
-          .from("expenses")
-          .insert(rows)
-          .then(({ error: e }) => { if (e) setError(e.message); });
+        const addedIds = new Set(toAdd.map((e) => e.id));
+        const rollback = () =>
+          setExpenses((prev) => prev.filter((e) => !addedIds.has(e.id)));
+        // Import requires a live connection (gated by the page) and there is no
+        // offline queue for bulk imports, so any failure — network or server —
+        // rolls back the optimistic rows and surfaces the error rather than
+        // leaving local state diverged from the database.
+        commitWrite(() => supabase.from("expenses").insert(rows), {
+          onNetworkError: () => { markOffline(); rollback(); setError(OFFLINE_WRITE_MESSAGE); },
+          onServerError: (msg) => { rollback(); setError(msg); },
+        });
       }
       return { added: toAdd.length, skipped: backupExpenses.length - toAdd.length };
     },
