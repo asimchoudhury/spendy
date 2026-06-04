@@ -40,9 +40,9 @@ export default function ExpensesPage() {
   const offline = useOffline();
 
   const handleAdd = (data: ExpenseFormData) => {
-    addExpense(data);
+    const added = addExpense(data);
     setShowAddForm(false);
-    addToast("success", "Expense added!");
+    if (added) addToast("success", "Expense added!");
   };
 
   const handleUpdate = (data: ExpenseFormData) => {

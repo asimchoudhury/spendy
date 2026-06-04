@@ -27,9 +27,9 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const handleAdd = (data: Parameters<typeof addExpense>[0]) => {
-    addExpense(data);
+    const added = addExpense(data);
     setShowForm(false);
-    addToast("success", "Expense added successfully!");
+    if (added) addToast("success", "Expense added successfully!");
   };
 
   const handleSeed = () => {
