@@ -42,6 +42,7 @@ export function ExpenseFiltersBar({
           <Search
             size={15}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
           />
           <input
             type="text"
@@ -53,31 +54,35 @@ export function ExpenseFiltersBar({
           {filters.search && (
             <button
               onClick={() => set({ search: "" })}
+              aria-label="Clear search"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
-              <X size={14} />
+              <X size={14} aria-hidden="true" />
             </button>
           )}
         </div>
 
         <button
           onClick={() => setShowDateFilters((s) => !s)}
+          aria-label="Toggle date filters"
+          aria-expanded={showDateFilters}
           className={`flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors ${
             showDateFilters || filters.dateFrom || filters.dateTo
               ? "bg-violet-50 border-violet-300 text-violet-700"
               : "border-gray-300 text-gray-600 hover:bg-gray-50"
           }`}
         >
-          <SlidersHorizontal size={14} />
+          <SlidersHorizontal size={14} aria-hidden="true" />
           <span className="hidden sm:inline">Date</span>
         </button>
 
         {hasActiveFilters && (
           <button
             onClick={clear}
+            aria-label="Clear filters"
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <X size={14} />
+            <X size={14} aria-hidden="true" />
             <span className="hidden sm:inline">Clear</span>
           </button>
         )}

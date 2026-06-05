@@ -49,15 +49,17 @@ export function ExpenseItem({ expense, categories, onEdit, onDelete }: ExpenseIt
           onClick={() => onEdit(expense)}
           className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
           title="Edit"
+          aria-label="Edit expense"
         >
-          <Pencil size={14} />
+          <Pencil size={14} aria-hidden="true" />
         </button>
         <button
           onClick={() => onDelete(expense.id)}
           className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
           title="Delete"
+          aria-label="Delete expense"
         >
-          <Trash2 size={14} />
+          <Trash2 size={14} aria-hidden="true" />
         </button>
       </div>
     </div>

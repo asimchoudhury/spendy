@@ -31,16 +31,17 @@ function Toast({ toast, onDismiss }: ToastProps) {
       }`}
     >
       {toast.type === "success" ? (
-        <CheckCircle size={16} className="text-emerald-500 shrink-0" />
+        <CheckCircle size={16} className="text-emerald-500 shrink-0" aria-hidden="true" />
       ) : (
-        <XCircle size={16} className="text-red-500 shrink-0" />
+        <XCircle size={16} className="text-red-500 shrink-0" aria-hidden="true" />
       )}
       <span>{toast.message}</span>
       <button
         onClick={() => onDismiss(toast.id)}
+        aria-label="Dismiss notification"
         className="ml-2 opacity-60 hover:opacity-100 transition-opacity"
       >
-        <X size={14} />
+        <X size={14} aria-hidden="true" />
       </button>
     </div>
   );

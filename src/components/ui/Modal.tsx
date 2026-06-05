@@ -98,9 +98,10 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="overflow-y-auto flex-1 px-6 py-5">{children}</div>
