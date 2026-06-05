@@ -164,6 +164,7 @@ export function ExpenseForm({
             type="text"
             inputMode="decimal"
             placeholder="0.00"
+            data-autofocus
             value={form.amount}
             onChange={(e) => set("amount", e.target.value)}
             onBlur={() => blur("amount")}
