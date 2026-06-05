@@ -33,7 +33,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ## Front-end (pages, components, charts)
 
 ### High
-- [ ] **F1. Add focus trap + dialog ARIA to Modal** — `src/components/ui/Modal.tsx`. No `role="dialog"`/`aria-modal`/`aria-labelledby`; focus never moves in, never traps, never restores. Affects every add/edit/delete flow. (Escape + scroll-lock already present.)
+- [x] **F1. Add focus trap + dialog ARIA to Modal** — `src/components/ui/Modal.tsx` now sets `role="dialog"`/`aria-modal`/`aria-labelledby` (title id via `useId`), moves focus into the dialog on open, traps Tab/Shift+Tab, and restores focus to the trigger on close. Modal honors a `[data-autofocus]` child as its initial focus target (falls back to first focusable); marked the `ExpenseForm` amount input so Add Expense lands the cursor there. Also auto-focus the email field on the login page. Verified live (login autofocus + Add Expense modal: ARIA, focus-in, Tab/Shift+Tab trap, Escape-restore, amount autofocus) against a production build. Squashed + merged to main as `96ebd72`. (Escape + scroll-lock were already present.)
 - [x] **F2. Surface hook errors on Dashboard & Breakdown** — extracted a shared `src/components/ui/ErrorBanner.tsx` (suppresses network errors, which the global offline banner already covers) and wired it into `page.tsx` and `breakdown/page.tsx`, both now reading `error` from `useExpenses`/`useCategories`. Categories page left on its inline version to stay in scope.
 - [ ] **F3. Accessible names for icon-only controls** — Modal close button, ExpenseItem edit/delete (`title`-only), Toast dismiss, filter clear. Add `aria-label`; mark decorative lucide icons `aria-hidden="true"`.
 
