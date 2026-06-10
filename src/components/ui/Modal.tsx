@@ -18,6 +18,11 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  // Keep onClose in a ref so the setup effect below doesn't re-run (and re-grab
+  // focus) on every render when the caller passes an inline onClose handler.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -26,7 +31,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -72,7 +77,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
       document.body.style.overflow = "";
       previouslyFocused?.focus?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

@@ -35,6 +35,7 @@ function NameInput({
     <div className="flex flex-col gap-1">
       <input
         type="text"
+        data-autofocus
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
